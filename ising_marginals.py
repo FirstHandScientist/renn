@@ -45,6 +45,7 @@ def main(args):
   cuda.set_device(args.gpu)  
 
   def run_marginal_exp(n, seed=3435):
+    '''compare the marginals produced by mean field, loopy bp, and inference network'''
     np.random.seed(seed)
     torch.manual_seed(seed)
     ising = ising_models.Ising(n)
@@ -52,7 +53,9 @@ def main(args):
 
     if args.gpu >= 0:
       ising.cuda()
+      
       ising.mask = ising.mask.cuda()
+      # number of neighbors - 1?
       ising.degree = ising.degree.cuda()  
       encoder.cuda()
 
@@ -142,6 +145,7 @@ def main(args):
     return [corr_mf, corr_lbp, corr_enc, l1_mf, l1_lbp, l1_enc]
 
   data = []
+  # run multiple number of experiments, and collect the stats of performance.
   for k in range(args.exp_iters):
     d = run_marginal_exp(args.n, k+1)
     data.append(d)
