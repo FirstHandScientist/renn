@@ -120,7 +120,8 @@ class Ising(nn.Module):
         self.degree = torch.Tensor([len(v)-1 for v in self.neighbors]).float()        
 
     def binary_mask(self, n):
-        # binary vector of size n**2 x n**2 
+        # binary vector of size n**2 x n**2
+        # denote the connectivity in the grid of ising model
         mask = torch.zeros(n**2, n**2)
         for i in range(n**2):
             for j in range(i+1, n **2):                        
@@ -313,6 +314,29 @@ class Ising(nn.Module):
                                            torch.stack([p_i1j0, p_i1j1], 0)], 0)            
             binary_marginals.append(binary_marginal)
         return torch.stack(binary_marginals, 0)
+    
+    def lbp_update_node(self, n, unary, binary, messages):
+        updated_message = []
+        for k in self.neighbors[n]:
+            unary_factor = torch.stack([-unary[n], unary[n]], 0) # 2 
+            if n < k:
+                binary_factor = binary[n][k]
+            else:
+                binary_factor = binary[k][n]
+            binary_factor = torch.stack([binary_factor, -binary_factor], 0)
+            binary_factor = torch.stack([binary_factor, -binary_factor], 1) # 2 x 2
+            messages_jn = []
+            for j in self.neighbors[n]:
+                if j != k:
+                    messages_jn.append(messages[j][n].log()) # 2
+            messages_jn = torch.stack(messages_jn, 0).sum(0)# 2
+            message = messages_jn + unary_factor
+            message = message.unsqueeze(1) + binary_factor 
+            log_message = logsumexp(message, 0) # 2
+            message = F.softmax(log_message, dim = 0)
+            updated_message.append(message.detach())
+        return torch.stack(updated_message)
+
         
     def lbp_update(self, num_iters = 1, messages = None):
         binary = self.binary*self.mask
@@ -321,24 +345,8 @@ class Ising(nn.Module):
             messages = self.unary.new(self.n**2, self.n**2, 2).fill_(0.5)
         for _ in range(num_iters):
             for n in np.random.permutation(range(self.n**2)):
-                for k in self.neighbors[n]:
-                    unary_factor = torch.stack([-unary[n], unary[n]], 0) # 2 
-                    if n < k:
-                        binary_factor = binary[n][k]
-                    else:
-                        binary_factor = binary[k][n]
-                    binary_factor = torch.stack([binary_factor, -binary_factor], 0)
-                    binary_factor = torch.stack([binary_factor, -binary_factor], 1) # 2 x 2
-                    messages_jn = []
-                    for j in self.neighbors[n]:
-                        if j != k:
-                            messages_jn.append(messages[j][n].log()) # 2
-                    messages_jn = torch.stack(messages_jn, 0).sum(0)# 2
-                    message = messages_jn + unary_factor
-                    message = message.unsqueeze(1) + binary_factor 
-                    log_message = logsumexp(message, 0) # 2
-                    message = F.softmax(log_message, dim = 0)
-                    messages[n][k].copy_(message)                    
+                messages[n][self.neighbors[n]] = self.lbp_update_node(n, unary, binary, messages)
+                
         return messages
 
     def lbp_marginals(self, messages):
@@ -378,15 +386,18 @@ class Ising(nn.Module):
         unary = self.unary
         unary1 = self.unary
         unary0 = -self.unary
+        # bethe free energy computation of unary part
         unary_marginals1 = unary_marginals
         unary_marginals0 = 1 - unary_marginals
+        # why the minus unary here ???
         bethe_unary = (unary_marginals0.log() - unary0)*unary_marginals0 + (
             unary_marginals1.log() - unary1)*unary_marginals1
         bethe_unary = self.degree*bethe_unary
         bethe = -bethe_unary.sum()
+        # bethe free energy computation of binary part
         for k, (i,j) in enumerate(self.binary_idx):
             binary_marginal = binary_marginals[k]
-            binary_factor = binary[i][j]
+            binary_factor = binary[i][j] # J_ij
             binary_factor = torch.stack([binary_factor, -binary_factor], 0)
             binary_factor = torch.stack([binary_factor, -binary_factor], 1) # 2 x 2
             unary_factor_i = torch.stack([-unary[i], unary[i]], 0) # 2 
