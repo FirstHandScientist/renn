@@ -1,6 +1,61 @@
 import math
 import torch
 import numpy as np
+from sklearn.datasets import load_digits as _load_digits
+from sklearn.model_selection import train_test_split
+
+def nudge_dataset(X, Y):
+    """
+    This produces a dataset 5 times bigger than the original one,
+    by moving the 8x8 images in X around by 1px to left, right, down, up
+    """
+    from scipy.ndimage import convolve
+    direction_vectors = [
+        [[0, 1, 0],
+         [0, 0, 0],
+         [0, 0, 0]],
+
+        [[0, 0, 0],
+         [1, 0, 0],
+         [0, 0, 0]],
+
+        [[0, 0, 0],
+         [0, 0, 1],
+         [0, 0, 0]],
+
+        [[0, 0, 0],
+         [0, 0, 0],
+         [0, 1, 0]]]
+
+    shift = lambda x, w: convolve(x.reshape((8, 8)), mode='constant',
+                                  weights=w).ravel()
+    X = np.concatenate([X] +
+                       [np.apply_along_axis(shift, 1, X, vector)
+                        for vector in direction_vectors])
+    Y = np.concatenate([Y for _ in range(5)], axis=0)
+    return X, Y
+
+def load_digits():
+
+    digits = _load_digits()
+    X = np.asarray(digits.data, 'float32')
+    X, Y = nudge_dataset(X, digits.target)
+    X = (X - np.min(X, 0)) / (np.max(X, 0) + 0.0001)  # 0-1 scaling
+    n, d2 = X.shape
+    d = int(np.sqrt(d2))
+    X = X.reshape((n,1,d,d))
+    Y = np.array(Y, dtype=np.uint8)
+
+    X_train, X_val, y_train, y_val = train_test_split(X, Y,
+                                                        test_size=0.2,
+                                                        random_state=0)
+    # TODO: We don't use these right now
+    X_test, y_test = None, None
+
+    # We just return all the arrays in order, as expected in main().
+    # (It doesn't matter how we do this as long as we can read them again.)
+    return X_train, y_train, X_val, y_val, X_test, y_test
+
 
 def corr(t1, t2):
     return np.corrcoef(t1.data.cpu().numpy(), t2.data.cpu().numpy())[0][1]
