@@ -556,7 +556,7 @@ def exact_validate(corpus, model, helper, device):
     return ll, nex, ntokens
 
 parser = argparse.ArgumentParser(description='')
-parser.add_argument('-data', type=str, default="/scratch/data/ptb/",
+parser.add_argument('-data', type=str, default="pen_tree_data",
                     help='location of the data corpus')
 parser.add_argument('-thresh', type=int, default=0, help='')
 parser.add_argument('-max_len', type=int, default=50, help='')
