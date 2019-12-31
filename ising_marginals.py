@@ -48,10 +48,11 @@ def bp_infer(ising, msg_iters, solver):
   for i in range(msg_iters):
     if solver is 'lbp':
       messages = ising.lbp_update(1, messages).detach()
+      unary_marginals_lbp_new, binary_marginals_lbp_new = ising.lbp_marginals(messages)
     elif solver is 'alphabp':
       messages = ising.alphabp_update(1, messages).detach()
+      unary_marginals_lbp_new, binary_marginals_lbp_new = ising.alphabp_marginals(messages)
 
-    unary_marginals_lbp_new, binary_marginals_lbp_new = ising.lbp_marginals(messages)
     delta_unary = l2(unary_marginals_lbp_new, unary_marginals_lbp) 
     delta_binary = l2(binary_marginals_lbp_new[:, 1, 1], binary_marginals_lbp[:, 1, 1])
     delta = delta_unary + delta_binary
