@@ -400,6 +400,23 @@ class Ising(nn.Module):
                 
         return messages
 
+    def alphabp_marginals(self, messages):
+        '''Get the unary and binary marginals from alphabp messages '''
+        binary = self.binary*self.mask
+        unary = self.unary
+        unary_marginals = []
+        binary_marginals = []
+        for n in range(self.n**2):
+            unary_factor = torch.stack([-unary[n], unary[n]], 0) # 2 
+            for k in self.neighbors[n]:
+                unary_factor = unary_factor + messages[k][n].log()
+            unary_prob = F.softmax(unary_factor, dim = 0)
+            unary_marginals.append(unary_prob[1])        
+        unary_marginals = torch.stack(unary_marginals, 0)
+        binary_marginals = self.mf_binary_marginals(unary_marginals)
+
+        return unary_marginals, binary_marginals
+
 
     def lbp_marginals(self, messages):
         binary = self.binary*self.mask
