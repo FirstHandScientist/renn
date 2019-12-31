@@ -378,7 +378,7 @@ class Ising(nn.Module):
             log_message = log_message + old_message_nk.log() * (1 - alpha)
             # normalize and convert to real domain 
             message = F.softmax(log_message, dim = 0)
-            updated_message.append(message.detach())
+            updated_message.append(message)
         return torch.stack(updated_message)
 
     def lbp_update(self, num_iters = 1, messages = None):
@@ -401,6 +401,7 @@ class Ising(nn.Module):
         unary = self.unary
         if messages is None:
             messages = self.unary.new(self.n**2, self.n**2, 2).fill_(0.5)
+            
         new_messages = messages.detach()
         for _ in range(num_iters):
             for n in np.random.permutation(range(self.n**2)):
