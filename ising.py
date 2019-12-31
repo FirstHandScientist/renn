@@ -112,7 +112,7 @@ class Ising(nn.Module):
         self.n = n
         self.unary = nn.Parameter(torch.randn(n**2))
         self.binary = nn.Parameter(torch.randn(n**2, n**2))
-        self.alpha_wgt = nn.Parameter(torch.ones(n**2, n**2) * 1.0)
+        self.alpha_wgt = nn.Parameter(torch.ones(n**2, n**2) * 1.1)
         self.mask = self.binary_mask(n)
         self.binary_idx = []
         for i in range(n**2):
@@ -401,12 +401,13 @@ class Ising(nn.Module):
         unary = self.unary
         if messages is None:
             messages = self.unary.new(self.n**2, self.n**2, 2).fill_(0.5)
+        new_messages = messages.detach()
         for _ in range(num_iters):
             for n in np.random.permutation(range(self.n**2)):
                 # update message from node n to its neighbors
-                messages[n][self.neighbors[n]] = self.alphabp_update_node(n, unary, binary, messages)
+                new_messages[n][self.neighbors[n]] = self.alphabp_update_node(n, unary, binary, messages)
                 
-        return messages
+        return new_messages
 
     def alphabp_marginals(self, messages):
         '''Get the unary and binary marginals from alphabp messages '''

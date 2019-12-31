@@ -44,14 +44,22 @@ def bp_infer(ising, msg_iters, solver):
   '''Do belief propagation with given solver'''
   messages = torch.zeros(ising.n**2, ising.n**2, 2).fill_(0.5).cuda()
   unary_marginals_lbp, binary_marginals_lbp = ising.lbp_marginals(messages)
-  
+  optimizer = torch.optim.Adam([ising.alpha_wgt], lr=0.5)
+
   for i in range(msg_iters):
     if solver is 'lbp':
       messages = ising.lbp_update(1, messages).detach()
       unary_marginals_lbp_new, binary_marginals_lbp_new = ising.lbp_marginals(messages)
     elif solver is 'alphabp':
-      messages = ising.alphabp_update(1, messages).detach()
-      unary_marginals_lbp_new, binary_marginals_lbp_new = ising.alphabp_marginals(messages)
+      optimizer.zero_grad()
+      new_messages = ising.alphabp_update(1, messages)
+      unary_marginals_lbp_new, binary_marginals_lbp_new = ising.alphabp_marginals(new_messages)
+      loss = ising.bethe_energy(unary_marginals_lbp_new, binary_marginals_lbp_new)
+      loss.backward()
+      optimizer.step()
+      messages = new_messages.detach()
+      
+
 
     delta_unary = l2(unary_marginals_lbp_new, unary_marginals_lbp) 
     delta_binary = l2(binary_marginals_lbp_new[:, 1, 1], binary_marginals_lbp[:, 1, 1])
