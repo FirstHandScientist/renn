@@ -112,7 +112,7 @@ class Ising(nn.Module):
         self.n = n
         self.unary = nn.Parameter(torch.randn(n**2))
         self.binary = nn.Parameter(torch.randn(n**2, n**2))
-        self.alpha_wgt = nn.Parameter(torch.ones(n**2, n**2) * 1.)
+        self.alpha_wgt = nn.Parameter(torch.ones(n**2, n**2) * 1.0)
         self.mask = self.binary_mask(n)
         self.binary_idx = []
         for i in range(n**2):
@@ -120,7 +120,8 @@ class Ising(nn.Module):
                 if self.mask[i][j].item() > 0:
                     self.binary_idx.append((i,j))
         self.neighbors = [self.get_neighbor(k) for k in range(self.n**2)]
-        self.degree = torch.Tensor([len(v)-1 for v in self.neighbors]).float()        
+        self.degree = torch.Tensor([len(v)-1 for v in self.neighbors]).float()
+        self.EPS = 1e-6
 
     def binary_mask(self, n):
         # binary vector of size n**2 x n**2
@@ -353,8 +354,11 @@ class Ising(nn.Module):
             # why this comparison ?
             if n < k:
                 binary_factor = binary[n][k]
+                alpha = self.alpha_wgt[n][k]
             else:
                 binary_factor = binary[k][n]
+                alpha = self.alpha_wgt[k][n]
+
             binary_factor = torch.stack([binary_factor, -binary_factor], 0)
             binary_factor = torch.stack([binary_factor, -binary_factor], 1) # 2 x 2
             messages_jn = []
@@ -363,11 +367,15 @@ class Ising(nn.Module):
                     messages_jn.append(messages[j][n].log()) # 2
             messages_jn = torch.stack(messages_jn, 0).sum(0)# 2
             message = messages_jn + unary_factor
+
+            old_message_kn = messages[k][n] + self.EPS
+            old_message_nk = messages[n][k] + self.EPS
+
             message = message.unsqueeze(1) \
-                + binary_factor * self.alpha_wgt[n, k] \
-                + messages[n][k].log() * (1 - self.alpha_wgt[n, k])
+                + binary_factor * alpha \
+                + old_message_kn.log() * (1 - alpha)
             log_message = logsumexp(message, 0) # 2
-            log_message = log_message + messages[n][k].log() * (1 - self.alpha_wgt[n, k])
+            log_message = log_message + old_message_nk.log() * (1 - alpha)
             # normalize and convert to real domain 
             message = F.softmax(log_message, dim = 0)
             updated_message.append(message.detach())
