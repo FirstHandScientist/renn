@@ -12,7 +12,7 @@ from torchvision.models.resnet import BasicBlock, Bottleneck, conv1x1
 
 from rbm_infnets import SeqInfNet
 
-from utils import clip_opt_params, get_rbm_ne, batch_kl, get_rbm_edges
+from utils import clip_opt_params, get_rbm_ne, batch_kl, get_rbm_edges, load_digits
 from lbp_util import dolbp
 #import kuleshov_data_py3 as data
 
@@ -286,6 +286,9 @@ def rbm_outer_loss(batch, model, rho, un_lpots, ed_lpots, ne, penfunc=None):
     ed_lpots - 1 x nvis x nhid x 2*2
     ne - 1 x nvis + nhid x 2
     """
+    ## seems to be wrong,
+    # the objective should be F(tau_x, \theta) - F(tau, theta)
+    
     # loss is -log \sum_h exp(-en(h, v)) - F(tau, theta)
     #       = free_energy(v) - F(tau, theta)
     _, V, H, _ = ed_lpots.size()
@@ -750,16 +753,17 @@ def main(args, trdat, valdat, nvis, ne):
     return bestmodel, bestinfnet, best_loss
 
 
+
 if __name__ == "__main__":
     args = parser.parse_args()
     print(args)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
 
-    # Xtr, _, Xval, _, _, _ = data.load_digits()
-    # Xtr = torch.from_numpy(Xtr).squeeze(1).round() # N x dim1 x dim2
-    # Xval = torch.from_numpy(Xval).squeeze(1).round() # N x dim1 x dim2
-    Xtr, Xval = torch.load("kuleshov_digits.pt") # each is N x dim1 x dim2; in [0, 1]
+    Xtr, _, Xval, _, _, _ = load_digits()
+    Xtr = torch.from_numpy(Xtr).squeeze(1).round() # N x dim1 x dim2
+    Xval = torch.from_numpy(Xval).squeeze(1).round() # N x dim1 x dim2
+    # Xtr, Xval = torch.load("kuleshov_digits.pt") # each is N x dim1 x dim2; in [0, 1]
     Xtr, Xval = Xtr.round(), Xval.round()
     nvis = Xtr.size(1) * Xtr.size(2)
 
