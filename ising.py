@@ -79,12 +79,14 @@ class TransformerInferenceNetwork(nn.Module):
         for l in range(self.num_layers):
             x = self.attn_layers[l](x, self.mask) # 1 x n**2 x state_dim
 
+        # here output of attn_layers is embedding vector e
         binary_features = []
         for (i,j) in binary_idx:
             emb_ij = torch.cat([x[0][i], x[0][j]], 0) # state_dim*2            
             binary_features.append(emb_ij)
         binary_features = torch.stack(binary_features, 0) # |E| x state_dim*2        
         binary_logits = self.mlp(binary_features) 
+        # binary_logits = [h_1, h_2, ... h_n2]
         binary_prob = F.softmax(binary_logits, dim = 1)
         binary_marginals = binary_prob.view(-1, 2, 2)
         unary_marginals_all = [[] for _ in range(self.n**2)]
@@ -110,6 +112,7 @@ class Ising(nn.Module):
         self.n = n
         self.unary = nn.Parameter(torch.randn(n**2))
         self.binary = nn.Parameter(torch.randn(n**2, n**2))
+        self.alpha_wgt = nn.Parameter(torch.ones(n**2, n**2) * 1.)
         self.mask = self.binary_mask(n)
         self.binary_idx = []
         for i in range(n**2):
@@ -316,9 +319,12 @@ class Ising(nn.Module):
         return torch.stack(binary_marginals, 0)
     
     def lbp_update_node(self, n, unary, binary, messages):
+        '''Update the messages sent from node n to its neighbors'''
         updated_message = []
         for k in self.neighbors[n]:
-            unary_factor = torch.stack([-unary[n], unary[n]], 0) # 2 
+            # compute the message from node n to its neighbor k
+            unary_factor = torch.stack([-unary[n], unary[n]], 0) # 2
+            # why this comparison ?
             if n < k:
                 binary_factor = binary[n][k]
             else:
@@ -337,7 +343,36 @@ class Ising(nn.Module):
             updated_message.append(message.detach())
         return torch.stack(updated_message)
 
-        
+
+    def alphabp_update_node(self, n, unary, binary, messages):
+        '''Update the messages sent from node n to its neighbors'''
+        updated_message = []
+        for k in self.neighbors[n]:
+            # compute the message from node n to its neighbor k
+            unary_factor = torch.stack([-unary[n], unary[n]], 0) # 2
+            # why this comparison ?
+            if n < k:
+                binary_factor = binary[n][k]
+            else:
+                binary_factor = binary[k][n]
+            binary_factor = torch.stack([binary_factor, -binary_factor], 0)
+            binary_factor = torch.stack([binary_factor, -binary_factor], 1) # 2 x 2
+            messages_jn = []
+            for j in self.neighbors[n]:
+                if j != k:
+                    messages_jn.append(messages[j][n].log()) # 2
+            messages_jn = torch.stack(messages_jn, 0).sum(0)# 2
+            message = messages_jn + unary_factor
+            message = message.unsqueeze(1) \
+                + binary_factor * self.alpha_wgt[n, k] \
+                + messages[n][k].log() * (1 - self.alpha_wgt[n, k])
+            log_message = logsumexp(message, 0) # 2
+            log_message = log_message + messages[n][k].log() * (1 - self.alpha_wgt[n, k])
+            # normalize and convert to real domain 
+            message = F.softmax(log_message, dim = 0)
+            updated_message.append(message.detach())
+        return torch.stack(updated_message)
+
     def lbp_update(self, num_iters = 1, messages = None):
         binary = self.binary*self.mask
         unary = self.unary
@@ -345,9 +380,26 @@ class Ising(nn.Module):
             messages = self.unary.new(self.n**2, self.n**2, 2).fill_(0.5)
         for _ in range(num_iters):
             for n in np.random.permutation(range(self.n**2)):
+                # update message from node n to its neighbors
                 messages[n][self.neighbors[n]] = self.lbp_update_node(n, unary, binary, messages)
                 
         return messages
+
+    def alphabp_update(self, num_iters = 1, messages = None, linear_response = False):
+        # messages update of alpha BP
+        # todo: linear response to adjust alpha
+        
+        binary = self.binary*self.mask
+        unary = self.unary
+        if messages is None:
+            messages = self.unary.new(self.n**2, self.n**2, 2).fill_(0.5)
+        for _ in range(num_iters):
+            for n in np.random.permutation(range(self.n**2)):
+                # update message from node n to its neighbors
+                messages[n][self.neighbors[n]] = self.alphabp_update_node(n, unary, binary, messages)
+                
+        return messages
+
 
     def lbp_marginals(self, messages):
         binary = self.binary*self.mask
