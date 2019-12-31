@@ -112,7 +112,7 @@ class Ising(nn.Module):
         self.n = n
         self.unary = nn.Parameter(torch.randn(n**2))
         self.binary = nn.Parameter(torch.randn(n**2, n**2))
-        self.alpha_wgt = nn.Parameter(torch.ones(n**2, n**2) * 1.1)
+        self.alpha_wgt = nn.Parameter(torch.randn(n**2, n**2) * 0.01 + 1)
         self.mask = self.binary_mask(n)
         self.binary_idx = []
         for i in range(n**2):
