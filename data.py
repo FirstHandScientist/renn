@@ -39,13 +39,13 @@ class SentCorpus(object):
         self.dictionary = Dictionary()
 
         if vocab is None:
-            self.get_vocabs(os.path.join(path, "train.txt"), vocabsize=vocabsize, thresh=thresh)
+            self.get_vocabs(os.path.join(path, "ptb.train.txt"), vocabsize=vocabsize, thresh=thresh)
         else:
             self.dictionary.idx2word = vocab
             self.dictionary.word2idx = {wrd: i for i, wrd in enumerate(vocab)}
         print("using vocabulary of size:", len(self.dictionary))
 
-        with open(os.path.join(path, "train.txt")) as f:
+        with open(os.path.join(path, "ptb.train.txt")) as f:
             # get sentence, lineno pairs
             toktrsents = []
             for i, line in enumerate(f):
@@ -60,7 +60,7 @@ class SentCorpus(object):
             # [tup[0].append(self.dictionary.word2idx["<eos>"]) for tup in toktrsents]
         self.train, self.train_mb2linenos = self.minibatchify(toktrsents, bsz) # list of minibatches
 
-        with open(os.path.join(path, "valid.txt")) as f:
+        with open(os.path.join(path, "ptb.valid.txt")) as f:
             # get sentence, lineno pairs
             tokvalsents = []
             for i, line in enumerate(f):
