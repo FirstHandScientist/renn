@@ -45,7 +45,7 @@ def bp_infer(ising, msg_iters, solver, optmz_alpha=False):
   messages = torch.zeros(ising.n**2, ising.n**2, 2).fill_(0.5).cuda()
   unary_marginals_lbp, binary_marginals_lbp = ising.lbp_marginals(messages)
   if optmz_alpha:
-    optimizer = torch.optim.Adam([ising.alpha_wgt], lr=0.001)
+    optimizer = torch.optim.Adam([ising.alpha_wgt], lr=0.05)
 
   for i in range(msg_iters):
     if solver is 'lbp':
@@ -56,7 +56,7 @@ def bp_infer(ising, msg_iters, solver, optmz_alpha=False):
       unary_marginals_lbp_new, binary_marginals_lbp_new = ising.alphabp_marginals(new_messages)
       if optmz_alpha:
         optimizer.zero_grad()
-        loss = ising.bethe_energy(unary_marginals_lbp_new, binary_marginals_lbp_new)
+        loss = ising.free_energy_mf(unary_marginals_lbp_new)
         loss.backward()
         optimizer.step()
         
@@ -110,6 +110,7 @@ def main(args):
       delta = delta_unary + delta_binary
       if delta < args.eps:
         break
+      
       unary_marginals_mf = unary_marginals_mf_new.detach()
       binary_marginals_mf = binary_marginals_mf_new.detach()
 
@@ -121,7 +122,7 @@ def main(args):
     # loopy bp
     log_Z_lbp, unary_marginals_lbp, binary_marginals_lbp = bp_infer(ising, args.msg_iters, 'lbp')
     # alhpa bp
-    log_Z_alphabp, unary_marginals_alphabp, binary_marginals_alphabp = bp_infer(ising, args.msg_iters, 'alphabp')
+    log_Z_alphabp, unary_marginals_alphabp, binary_marginals_alphabp = bp_infer(ising, args.msg_iters, 'alphabp', True)
 
     # inference network
     optimizer = torch.optim.Adam(encoder.parameters(), lr=args.lr)
@@ -141,6 +142,7 @@ def main(args):
       delta = delta_unary + delta_binary
       if delta < args.eps:
         break
+      
       unary_marginals_enc = unary_marginals_enc_new.detach()
       binary_marginals_enc = binary_marginals_enc_new.detach()
       
@@ -186,6 +188,7 @@ def main(args):
     log_Z_diff_alphabp = abs(log_Z.item() - log_Z_alphabp.item())
     log_Z_diff_enc = abs(log_Z.item() - log_Z_enc.item())
     print('log_Z error:', log_Z_diff_mf, abs(log_Z_mf_energy.item() - log_Z_mf.item()), log_Z_diff_lbp, log_Z_diff_enc)
+    
     return [corr_mf, corr_lbp, corr_alphabp, corr_enc, l1_mf, l1_lbp, l1_alphabp, l1_enc]
 
   data = []
