@@ -378,6 +378,9 @@ class Ising(nn.Module):
             log_message = log_message + old_message_nk.log() * (1 - alpha)
             # normalize and convert to real domain 
             message = F.softmax(log_message, dim = 0)
+            # assert torch.isnan(message).sum()==0, "Encounter nan in message update..."
+            if torch.isnan(message).sum()>0:
+                print("Encounter nan in message update...")
             updated_message.append(message)
         return torch.stack(updated_message)
 

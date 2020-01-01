@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- python-indent-offset: 4; -*-
 import sys
 import os
 
@@ -45,7 +46,7 @@ def bp_infer(ising, msg_iters, solver, optmz_alpha=False):
   messages = torch.zeros(ising.n**2, ising.n**2, 2).fill_(0.5).cuda()
   unary_marginals_lbp, binary_marginals_lbp = ising.lbp_marginals(messages)
   if optmz_alpha:
-    optimizer = torch.optim.Adam([ising.alpha_wgt], lr=0.05)
+    optimizer = torch.optim.Adam([ising.alpha_wgt], lr=0.005)
 
   for i in range(msg_iters):
     if solver is 'lbp':
@@ -59,6 +60,9 @@ def bp_infer(ising, msg_iters, solver, optmz_alpha=False):
         loss = ising.free_energy_mf(unary_marginals_lbp_new)
         loss.backward()
         optimizer.step()
+        for group in optimizer.param_groups:
+          group['params'][0].data.clamp_(-1, 1.5)
+          
         
       messages = new_messages.detach()
       
@@ -147,7 +151,7 @@ def main(args):
       binary_marginals_enc = binary_marginals_enc_new.detach()
       
     log_Z_enc = -ising.bethe_energy(unary_marginals_enc, binary_marginals_enc)  
-      
+    
     # compute the marginals
     marginals = torch.cat([unary_marginals, binary_marginals[:, 1, 1]], 0)
     marginals_mf = torch.cat([unary_marginals_mf, binary_marginals_mf[:, 1, 1]], 0)
