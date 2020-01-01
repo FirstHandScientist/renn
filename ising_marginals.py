@@ -40,23 +40,26 @@ def l2(t1, t2):
 def l1(t1, t2):
   return ((t1 - t2).abs()).mean().item()
 
-def bp_infer(ising, msg_iters, solver):
+def bp_infer(ising, msg_iters, solver, optmz_alpha=False):
   '''Do belief propagation with given solver'''
   messages = torch.zeros(ising.n**2, ising.n**2, 2).fill_(0.5).cuda()
   unary_marginals_lbp, binary_marginals_lbp = ising.lbp_marginals(messages)
-  optimizer = torch.optim.Adam([ising.alpha_wgt], lr=0.001)
+  if optmz_alpha:
+    optimizer = torch.optim.Adam([ising.alpha_wgt], lr=0.001)
 
   for i in range(msg_iters):
     if solver is 'lbp':
       messages = ising.lbp_update(1, messages).detach()
       unary_marginals_lbp_new, binary_marginals_lbp_new = ising.lbp_marginals(messages)
     elif solver is 'alphabp':
-      optimizer.zero_grad()
       new_messages = ising.alphabp_update(1, messages)
       unary_marginals_lbp_new, binary_marginals_lbp_new = ising.alphabp_marginals(new_messages)
-      loss = ising.bethe_energy(unary_marginals_lbp_new, binary_marginals_lbp_new)
-      loss.backward()
-      optimizer.step()
+      if optmz_alpha:
+        optimizer.zero_grad()
+        loss = ising.bethe_energy(unary_marginals_lbp_new, binary_marginals_lbp_new)
+        loss.backward()
+        optimizer.step()
+        
       messages = new_messages.detach()
       
 
@@ -111,6 +114,8 @@ def main(args):
       binary_marginals_mf = binary_marginals_mf_new.detach()
 
     log_Z_mf = -ising.bethe_energy(unary_marginals_mf, binary_marginals_mf)
+    log_Z_mf_energy = -ising.free_energy_mf(unary_marginals_mf)
+
 
     
     # loopy bp
@@ -180,7 +185,7 @@ def main(args):
     log_Z_diff_lbp = abs(log_Z.item() - log_Z_lbp.item())
     log_Z_diff_alphabp = abs(log_Z.item() - log_Z_alphabp.item())
     log_Z_diff_enc = abs(log_Z.item() - log_Z_enc.item())
-    print('log_Z error:', log_Z_diff_mf, log_Z_diff_lbp, log_Z_diff_enc)
+    print('log_Z error:', log_Z_diff_mf, abs(log_Z_mf_energy.item() - log_Z_mf.item()), log_Z_diff_lbp, log_Z_diff_enc)
     return [corr_mf, corr_lbp, corr_alphabp, corr_enc, l1_mf, l1_lbp, l1_alphabp, l1_enc]
 
   data = []
