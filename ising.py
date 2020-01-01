@@ -459,6 +459,32 @@ class Ising(nn.Module):
             binary_marginal = binary_marginal.view(2, 2)
             binary_marginals.append(binary_marginal)
         return unary_marginals, torch.stack(binary_marginals, 0)
+
+    def free_energy_mf(self, unary_marginals):
+        '''Compute the free energy for fully factorized estimations'''
+        binary = self.binary*self.mask
+        unary = self.unary
+        unary1 = self.unary
+        unary0 = -self.unary
+        # bethe free energy computation of unary part
+        unary_marginals1 = unary_marginals
+        unary_marginals0 = 1 - unary_marginals
+        unary_beliefs = torch.stack([unary_marginals0, unary_marginals1], 1) # 100 x 2
+        # entropy and unary part of average energy
+        bethe_unary = (unary_marginals0.log() - unary0)*unary_marginals0 + \
+            (unary_marginals1.log() - unary1)*unary_marginals1
+        free_energy = bethe_unary.sum()
+        # include the binary part of free energy
+        for k, (i,j) in enumerate(self.binary_idx):
+            binary_factor = binary[i][j] # J_ij
+            binary_factor = torch.stack([binary_factor, -binary_factor], 0)
+            binary_factor = torch.stack([binary_factor, -binary_factor], 1) # 2 x 2
+            
+            marginal_ij = unary_beliefs[i].unsqueeze(1) * unary_beliefs[j].unsqueeze(0)
+            free_energy += - (marginal_ij * binary_factor).sum()
+        
+        return free_energy
+        
         
     def bethe_energy(self, unary_marginals, binary_marginals):
         binary = self.binary*self.mask
