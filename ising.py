@@ -4,6 +4,9 @@ import torch.nn.functional as F
 import itertools
 import numpy as np
 import math
+from models.RegionGraph import RegionGraph
+from pgmpy.factors.discrete import DiscreteFactor
+
 
 def logadd(x, y):
     d = torch.max(x,y)  
@@ -136,6 +139,53 @@ class Ising(nn.Module):
         return mask
 
 
+    def to_region_graph(self, step=1):
+        '''Convert the pairwise Ising model (MRF) into a RegionGraph'''
+        graph = RegionGraph()
+        clusters = self.cluster_variation(step)
+        graph.add_nodes_from(clusters)
+        
+        unary_marginals, binary_marginals = self.marginals()
+        unary_marginals = unary_marginals.cpu().to_numpy()
+        for i in range(self.n**2):
+            ufactor = DiscreteFactor([i], cardinality=[2], values=unary_marginals[i])
+            graph.add_factors(ufactor)
+            
+        binary_marginals = binary_marginals.cpu().to_numpy()
+        # need to verify if the values are in right order for binary factors
+        for (i,j) in self.binary_idx:
+            bfactor = DiscreteFactor([(i,j)], cardinality=[2,2], values=unary_marginals[i].reshape(-1))
+        
+        pass
+
+    def cluster_variation(self, step=1):
+        '''Given the ising model, return a list of clusters (tuples) where each tuple represent a cluster/region'''
+        regions = []
+        i, j = 0,0
+        while i>=0 and i< n**2:
+            while j>=0 and j< n**2:
+                cornor = i + j
+                candidate = [cornor + col + row * n for col in range(step+1) for row in range(step+1)]
+                regions.append(tuple(candidate.sort()))
+                j += step
+                
+            i += step
+
+        return regions
+    
+    
+    
+    def count_region(self, graph):
+        '''Given a region of a region graph, return the region count number'''
+        pass
+
+    def gain_count_region_graph(self,graph):
+        '''Attach the count number for each region in a region graph'''
+
+        pass
+
+    
+    
     def broadcast_sum(self, indices, reduce_idx, factors):
         union_idx = set()
         k = []
