@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import itertools
 import numpy as np
 import math
-from models.RegionGraph import RegionGraph
+from pgmpy.models import RegionGraph
 from pgmpy.factors.discrete import DiscreteFactor
 
 
@@ -125,6 +125,7 @@ class Ising(nn.Module):
         self.neighbors = [self.get_neighbor(k) for k in range(self.n**2)]
         self.degree = torch.Tensor([len(v)-1 for v in self.neighbors]).float()
         self.EPS = 1e-6
+        self.region_graph = None
 
     def binary_mask(self, n):
         # binary vector of size n**2 x n**2
@@ -139,11 +140,13 @@ class Ising(nn.Module):
         return mask
 
 
-    def to_region_graph(self, step=1):
+    def generate_region_graph(self, step=1):
         '''Convert the pairwise Ising model (MRF) into a RegionGraph'''
         graph = RegionGraph()
-        clusters = self.cluster_variation(step)
+        clusters = self._get_R0(step)
         graph.add_nodes_from(clusters)
+        graph.cluster_variation()
+        pass
         
         unary_marginals, binary_marginals = self.marginals()
         unary_marginals = unary_marginals.cpu().to_numpy()
@@ -158,32 +161,28 @@ class Ising(nn.Module):
         
         pass
 
-    def cluster_variation(self, step=1):
-        '''Given the ising model, return a list of clusters (tuples) where each tuple represent a cluster/region'''
+    def _get_R0(self, step=1):
+        """
+        Do the R0 clustering.
+        Given the ising model, return a list of clusters (tuples),
+        where each tuple represent a cluster/region.
+        Working for step = 1 now... need revise for generalized calculation.
+        """
         regions = []
+        n = self.n
         i, j = 0,0
-        while i>=0 and i< n**2:
-            while j>=0 and j< n**2:
-                cornor = i + j
-                candidate = [cornor + col + row * n for col in range(step+1) for row in range(step+1)]
-                regions.append(tuple(candidate.sort()))
+        while i>=0 and i< n - step:
+            j = 0
+            while j>=0 and j< n - step:
+                cornor = i * n + j
+                candidate = [cornor + col + row * n for row in range(step+1) for col in range(step+1)]
+                regions.append(tuple(candidate))
                 j += step
                 
             i += step
 
         return regions
     
-    
-    
-    def count_region(self, graph):
-        '''Given a region of a region graph, return the region count number'''
-        pass
-
-    def gain_count_region_graph(self,graph):
-        '''Attach the count number for each region in a region graph'''
-
-        pass
-
     
     
     def broadcast_sum(self, indices, reduce_idx, factors):
@@ -567,3 +566,8 @@ class Ising(nn.Module):
             bethe += binary_factor_ij.sum()
         return bethe
 
+if __name__ == '__main__':
+    model = Ising(10)
+    log_Z = model.log_partition_ve()
+    unary_marginals, binary_marginals = model.marginals()
+    model.generate_region_graph()
