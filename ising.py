@@ -126,6 +126,30 @@ class Ising(nn.Module):
         self.degree = torch.Tensor([len(v)-1 for v in self.neighbors]).float()
         self.EPS = 1e-6
         self.region_graph = None
+        self._init_factor_matrixs()
+
+    def _init_factor_matrixs(self):
+        binary = self.binary*self.mask
+        unary = self.unary
+        unary1 = self.unary
+        unary0 = -self.unary
+        # bethe free energy computation of unary part
+        self.log_unary_factors = {}
+        for i in range(len(unary)):
+            self.log_unary_factors[(i,)] = DiscreteFactor([str(i)], [2], torch.stack([unary0[i], unary1[i]], 0).data.numpy())
+        
+        
+        
+        self.log_binary_factors = {}
+        for k, (i,j) in enumerate(self.binary_idx):
+            binary_factor = binary[i][j] # J_ij
+            binary_factor = torch.stack([binary_factor, -binary_factor], 0)
+            binary_factor = torch.stack([binary_factor, -binary_factor], 1) # 2 x 2
+            d_binary_factor = DiscreteFactor([str(i), str(j)], [2,2], binary_factor.data.numpy())
+            self.log_binary_factors[(i,j)] = d_binary_factor
+            self.log_binary_factors[(j,i)] = d_binary_factor
+
+        return self
 
     def binary_mask(self, n):
         # binary vector of size n**2 x n**2
@@ -146,6 +170,10 @@ class Ising(nn.Module):
         clusters = self._get_R0(step)
         graph.add_nodes_from(clusters)
         graph.cluster_variation()
+        
+        # 1. regions factor
+        #   R0, R1, R2, as matrixs
+        graph.region_factors = self.gather_region_factors(graph)
         pass
         
         unary_marginals, binary_marginals = self.marginals()
@@ -160,6 +188,29 @@ class Ising(nn.Module):
             bfactor = DiscreteFactor([(i,j)], cardinality=[2,2], values=unary_marginals[i].reshape(-1))
         
         pass
+    def gather_region_fators(self, graph):
+        """
+        Input: Graph
+        Output: the region graph factors
+        """
+        pass
+
+    def _region_factor(self, node, region_type=None):
+        """
+        Input: node
+        Example: (0, 1, 10, 11), (34, 35), (74,)
+        
+        Output: matrix, node_cardinality * 2
+        """
+        assert region_type != None, "region_type can not be None."
+        if region_type == "R0":
+            pass
+        elif region_type == "R1":
+            pass
+        elif region_type == "R2":
+            pass
+            
+            
 
     def _get_R0(self, step=1):
         """
