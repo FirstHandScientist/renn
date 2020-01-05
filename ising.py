@@ -55,16 +55,16 @@ class SelfAttention(nn.Module):
         return out
 
 class TransformerInferenceNetwork(nn.Module):
-    def __init__(self, n, state_dim = 100, num_layers = 1):
+    def __init__(self, n, state_dim = 100, num_layers = 1, mlp_out_dim=4):
         super(TransformerInferenceNetwork, self).__init__()
         self.n = n
         self.node_emb = nn.Parameter(torch.randn(1, n**2, state_dim))
         self.attn_layers = nn.ModuleList([SelfAttention(state_dim) for _ in range(num_layers)])
         self.mlp = nn.Sequential(ResidualLayer(state_dim*2, state_dim*2), 
                                  ResidualLayer(state_dim*2, state_dim*2), 
-                                 nn.Linear(state_dim*2, 4))
+                                 nn.Linear(state_dim*2, mlp_out_dim))
         self.num_layers = num_layers
-        self.mask = torch.zeros(n**2, n**2).cuda().fill_(0)
+        self.mask = torch.zeros(n**2, n**2).fill_(0)
         self.binary_mlp = nn.Sequential(ResidualLayer(state_dim, state_dim),
                                  nn.Linear(state_dim, 1))
         self.state_dim = state_dim
@@ -108,7 +108,46 @@ class TransformerInferenceNetwork(nn.Module):
             loss += (binary_marginal.sum(1)[1] - unary_marginals[i])**2
             loss += (binary_marginal.sum(0)[1] - unary_marginals[j])**2
         return loss
+
+class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
+
+    def forward(self, graph=None):
+        region_idx = graph.region_layers
+        x = self.node_emb
+        for l in range(self.num_layers):
+            x = self.attn_layers[l](x, self.mask) # 1 x n**2 x state_dim
+
+        # here output of attn_layers is embedding vector e
+        region_features = []
+        for region in region_idx:
+            emb_rg = torch.cat([x[0][i] for i in region], 0) # state_dim*2            
+            region_features.append(emb_rg)
+            
+        region_features = torch.stack(binary_features, 0) # |R0| x state_dim*2        
+        region_logits = self.mlp(region_features) 
+        # region_logits = [h_1, h_2, ... h_n2]
+        region_prob = F.softmax(binary_logits, dim = 1)
+        region_beliefs = region_probm.view(len(redion_idx), 2, 2, 2, 2)
+        # cast to R1 and R2
         
+        binary_marginals = binary_prob.view(-1, 2, 2)
+        unary_marginals_all = [[] for _ in range(self.n**2)]
+        for k, (i,j) in enumerate(binary_idx):            
+            binary_marginal = binary_marginals[k]
+            unary_marginals_all[i].append(binary_marginal.sum(1))
+            unary_marginals_all[j].append(binary_marginal.sum(0))            
+        unary_marginals = [torch.stack(unary, 0).mean(0)[1] for unary in unary_marginals_all]
+        return torch.stack(unary_marginals), binary_marginals
+
+    def forward(self,):
+
+        pass
+
+    def aggrement_penalty(self):
+
+        pass
+
+
 class Ising(nn.Module):
     def __init__(self, n):
         super(Ising, self).__init__()
@@ -126,9 +165,9 @@ class Ising(nn.Module):
         self.degree = torch.Tensor([len(v)-1 for v in self.neighbors]).float()
         self.EPS = 1e-6
         self.region_graph = None
-        self._init_factor_matrixs()
+        self._init_disfactor()
 
-    def _init_factor_matrixs(self):
+    def _init_disfactor(self):
         binary = self.binary*self.mask
         unary = self.unary
         unary1 = self.unary
@@ -171,46 +210,63 @@ class Ising(nn.Module):
         graph.add_nodes_from(clusters)
         graph.cluster_variation()
         
-        # 1. regions factor
-        #   R0, R1, R2, as matrixs
-        graph.region_factors = self.gather_region_factors(graph)
-        pass
-        
-        unary_marginals, binary_marginals = self.marginals()
-        unary_marginals = unary_marginals.cpu().to_numpy()
-        for i in range(self.n**2):
-            ufactor = DiscreteFactor([i], cardinality=[2], values=unary_marginals[i])
-            graph.add_factors(ufactor)
-            
-        binary_marginals = binary_marginals.cpu().to_numpy()
-        # need to verify if the values are in right order for binary factors
-        for (i,j) in self.binary_idx:
-            bfactor = DiscreteFactor([(i,j)], cardinality=[2,2], values=unary_marginals[i].reshape(-1))
-        
-        pass
-    def gather_region_fators(self, graph):
+        # calculate the factor for each region and attach to graph
+        self.attach_region_factors(graph)
+
+        return self
+
+    def attach_region_factors(self, graph):
         """
         Input: Graph
         Output: the region graph factors
         """
-        pass
+        if not hasattr(self, "log_layer_phi"):
+            self.log_phis = {}
+            
+        for ri, regions in graph.region_layers.items():
+            self.log_phis[ri] = []
+            for region_j in regions:
+                the_phi = self._region_factor(region_j)
+                graph.nodes[region_j]["log_phi"] = the_phi
+                try:
+                    self.log_phis[ri].append(the_phi.values)
+                except:
+                    print("error")
 
-    def _region_factor(self, node, region_type=None):
+        return self
+
+    def _region_factor(self, node):
         """
         Input: node
         Example: (0, 1, 10, 11), (34, 35), (74,)
         
-        Output: matrix, node_cardinality * 2
+        Output: DiscreteFactor 
         """
-        assert region_type != None, "region_type can not be None."
-        if region_type == "R0":
-            pass
-        elif region_type == "R1":
-            pass
-        elif region_type == "R2":
-            pass
+        region_sum = DiscreteFactor(tuple([str(i) for i in node]), \
+                                    [2] * len(node), \
+                                    np.zeros(2 ** len(node)))
+        if len(node) ==1:
+            region_sum.sum(self.log_unary_factors[node], inplace=True)
+            return region_sum
+        
+        elif len(node) ==2:
+            for i in node:
+                region_sum.sum(self.log_unary_factors[(i,)], inplace=True)
+                
+            region_sum.sum(self.log_binary_factors[node], inplace=True)
+            return region_sum
+        
+        elif len(node) == 4:
+            for i in node:
+                region_sum.sum(self.log_unary_factors[(i,)], inplace=True)
+
+            for pair in itertools.combinations(node, 2):
+                if pair in self.log_binary_factors:
+                    region_sum.sum(self.log_binary_factors[pair], inplace=True)
+
+            return region_sum
             
-            
+        
 
     def _get_R0(self, step=1):
         """
@@ -622,3 +678,5 @@ if __name__ == '__main__':
     log_Z = model.log_partition_ve()
     unary_marginals, binary_marginals = model.marginals()
     model.generate_region_graph()
+    encoder = TransformerInferenceNetwork(10, 60, 1)
+    encoder(model.binary_idx)
