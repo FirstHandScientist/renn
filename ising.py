@@ -48,7 +48,7 @@ class SelfAttention(nn.Module):
         attn_scores = torch.matmul(query, key.transpose(1,2)) # b x l x l
         attn_scores = attn_scores 
         if mask is not None:
-            attn_scores = attn_scores + mask
+            attn_scores = attn_scores + mask.to(attn_scores.device)
         attn_probs = F.softmax(attn_scores, dim= -1)
         context = torch.matmul(attn_probs, value) # b x l x h
         out = self.ln(self.dense(context) + x)
