@@ -60,9 +60,10 @@ class TransformerInferenceNetwork(nn.Module):
         self.n = n
         self.node_emb = nn.Parameter(torch.randn(1, n**2, state_dim))
         self.attn_layers = nn.ModuleList([SelfAttention(state_dim) for _ in range(num_layers)])
-        self.mlp = nn.Sequential(ResidualLayer(state_dim*2, state_dim*2), 
-                                 ResidualLayer(state_dim*2, state_dim*2), 
-                                 nn.Linear(state_dim*2, mlp_out_dim))
+        local_times = int(math.log(mlp_out_dim,2))
+        self.mlp = nn.Sequential(ResidualLayer(state_dim*local_times, state_dim*local_times), 
+                                 ResidualLayer(state_dim*local_times, state_dim*local_times), 
+                                 nn.Linear(state_dim*local_times, mlp_out_dim))
         self.num_layers = num_layers
         self.mask = torch.zeros(n**2, n**2).fill_(0)
         self.binary_mlp = nn.Sequential(ResidualLayer(state_dim, state_dim),
@@ -112,7 +113,7 @@ class TransformerInferenceNetwork(nn.Module):
 class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
 
     def forward(self, graph=None):
-        region_idx = graph.region_layers
+        region_idx = graph.region_layers["R0"]
         x = self.node_emb
         for l in range(self.num_layers):
             x = self.attn_layers[l](x, self.mask) # 1 x n**2 x state_dim
@@ -123,25 +124,80 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
             emb_rg = torch.cat([x[0][i] for i in region], 0) # state_dim*2            
             region_features.append(emb_rg)
             
-        region_features = torch.stack(binary_features, 0) # |R0| x state_dim*2        
+        region_features = torch.stack(region_features, 0) # |R0| x state_dim*2        
         region_logits = self.mlp(region_features) 
         # region_logits = [h_1, h_2, ... h_n2]
-        region_prob = F.softmax(binary_logits, dim = 1)
-        region_beliefs = region_probm.view(len(redion_idx), 2, 2, 2, 2)
+        region_prob = F.softmax(region_logits, dim = 1)
+        r0_beliefs = region_prob.view(len(region_idx), 2, 2, 2, 2)
         # cast to R1 and R2
+        r1_beliefs, consist_error1= self.marginal_down(r0_beliefs, graph)
+        r2_beliefs, consist_error2= self.marginal_down(r1_beliefs, graph)
+        infered_beliefs = {"R0": r0_beliefs, "R1": r1_beliefs, "R2": r2_beliefs}
         
-        binary_marginals = binary_prob.view(-1, 2, 2)
-        unary_marginals_all = [[] for _ in range(self.n**2)]
-        for k, (i,j) in enumerate(binary_idx):            
-            binary_marginal = binary_marginals[k]
-            unary_marginals_all[i].append(binary_marginal.sum(1))
-            unary_marginals_all[j].append(binary_marginal.sum(0))            
-        unary_marginals = [torch.stack(unary, 0).mean(0)[1] for unary in unary_marginals_all]
-        return torch.stack(unary_marginals), binary_marginals
+        return infered_beliefs, consist_error1 + consist_error2
 
-    def forward(self,):
+    def marginal_down(self, r_beliefs, graph):
+        """
+        Given the beliefs in a layer, R0 or R1, cast to the marginals in children layer.
+        
+        """
+        if r_beliefs.dim() - 1 == 4:
+            # input is in R0
+            r1_beliefs, mismatch = self.belief_mismatch_regions_below(cast_job="R0R1", graph=graph, p_beliefs=r_beliefs)
 
-        pass
+            return r1_beliefs, mismatch
+
+        
+        elif r_beliefs.dim() - 1 == 2:
+            # input is in R1
+            r2_beliefs, mismatch = self.belief_mismatch_regions_below(cast_job="R1R2", graph=graph, p_beliefs=r_beliefs)
+
+            return r2_beliefs, mismatch
+
+
+    def belief_mismatch_regions_below(self, cast_job, graph, p_beliefs):
+        
+        parent_layer=graph.region_layers[cast_job[:2]]
+        child_layer=graph.region_layers[cast_job[2:]]
+        mismatch = 0
+        r1_beliefs = []
+        for child in child_layer:
+            r0_parents = graph.get_parents(child)
+            r0_parents_beliefs = p_beliefs[[parent_layer.index(i) for i in r0_parents]]
+            all_mgnl2child = self.mgnl2child(r0_parents, child, r0_parents_beliefs)
+
+            child_belief = all_mgnl2child.mean(dim=0)
+
+            r1_beliefs.append(child_belief)
+
+            mismatch += torch.sum((all_mgnl2child - child_belief ) ** 2)
+
+        return torch.stack(r1_beliefs), mismatch
+
+        
+
+    def mgnl2child(self, parents, child, parent_beliefs):
+        """
+        Calculation of cast marginals of parents to child nodes.
+        Parameters
+        ----------
+        parents and child nodes, parent_beliefs
+        
+        Examples
+        ----------
+        >>> parents = [(1,2,11,12), (2, 3, 12, 13)]
+        >>> child = (2,3)
+        >>> parent_beliefs = torch.randn(2,2,2,2,2)
+        """
+        child_beliefs = []
+        for idx, p_node in enumerate(parents):
+            set_diff = set(p_node) - set(child)
+            reduce_idx = [list(p_node).index(i) for i in set_diff]
+            child_beliefs.append(parent_beliefs[idx].sum(dim=reduce_idx))
+
+        return torch.stack(child_beliefs)
+
+
 
     def aggrement_penalty(self):
 
@@ -212,7 +268,7 @@ class Ising(nn.Module):
         
         # calculate the factor for each region and attach to graph
         self.attach_region_factors(graph)
-
+        self.region_graph = graph
         return self
 
     def attach_region_factors(self, graph):
@@ -677,6 +733,6 @@ if __name__ == '__main__':
     model = Ising(10)
     log_Z = model.log_partition_ve()
     unary_marginals, binary_marginals = model.marginals()
-    model.generate_region_graph()
-    encoder = TransformerInferenceNetwork(10, 60, 1)
-    encoder(model.binary_idx)
+    region_graph = model.generate_region_graph()
+    encoder = GeneralizedInferenceNetwork(10, 60, 1, mlp_out_dim=2**4)
+    encoder(model.region_graph)
