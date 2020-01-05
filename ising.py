@@ -136,6 +136,7 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
         
         return infered_beliefs, consist_error1 + consist_error2
 
+    
     def marginal_down(self, r_beliefs, graph):
         """
         Given the beliefs in a layer, R0 or R1, cast to the marginals in children layer.
@@ -199,9 +200,19 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
 
 
 
-    def aggrement_penalty(self):
+    def kikuchi_energy(self, log_phis, infer_beliefs, counts):
+        """Compute the Kikuchi free energy"""
+        energy = 0
+        for key, beliefs in infer_beliefs.items():
+            num_regions = beliefs.size(0)
+            beliefs = beliefs.reshape(num_regions, -1)
+            lphi = torch.from_numpy(log_phis[key]).reshape(num_regions, -1).type(beliefs.dtype)
+            regions_energy = torch.sum(beliefs * (beliefs.log() - lphi), dim=1)
+            layer_counts = torch.from_numpy(counts[key]).type(beliefs.dtype)
+            energy += (layer_counts * regions_energy).sum()
 
-        pass
+        return energy
+        
 
 
 class Ising(nn.Module):
@@ -289,6 +300,9 @@ class Ising(nn.Module):
                 except:
                     print("error")
 
+        for key, value in self.log_phis.items():
+            self.log_phis[key] = np.array(value)
+        
         return self
 
     def _region_factor(self, node):
@@ -735,4 +749,14 @@ if __name__ == '__main__':
     unary_marginals, binary_marginals = model.marginals()
     region_graph = model.generate_region_graph()
     encoder = GeneralizedInferenceNetwork(10, 60, 1, mlp_out_dim=2**4)
-    encoder(model.region_graph)
+    optimizer = torch.optim.Adam(encoder.parameters(), lr=1e-3)
+    for i in range(10):
+        optimizer.zero_grad()
+        infer_beliefs, consist_error = encoder(model.region_graph)
+        kikuchi_energy = encoder.kikuchi_energy(log_phis=model.log_phis,\
+                                                infer_beliefs=infer_beliefs, \
+                                                counts=model.region_graph.collect_region_count())
+        loss = kikuchi_energy + 10 * consist_error
+        loss.backward()
+        print(loss)
+        optimizer.step()
