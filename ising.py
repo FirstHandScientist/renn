@@ -774,13 +774,18 @@ class Ising(nn.Module):
         return bethe
 
 if __name__ == '__main__':
-    model = Ising(10)
+    num_n = 15
+    model = Ising(num_n)
     log_Z = model.log_partition_ve()
     unary_marginals, binary_marginals = model.marginals()
     model.generate_region_graph()
-    encoder = GeneralizedInferenceNetwork(10, 60, 1, mlp_out_dim=2**4)
+    
+    encoder = GeneralizedInferenceNetwork(num_n, 200, 1, mlp_out_dim=2**4)
     optimizer = torch.optim.Adam(encoder.parameters(), lr=1e-3)
-    for i in range(10):
+    unary_marginals_enc = torch.zeros_like(unary_marginals).fill_(0.5)
+    binary_marginals_enc = torch.zeros_like(binary_marginals).fill_(0.25)
+    from ising_marginals import corr, l1, l2
+    for i in range(200):
         optimizer.zero_grad()
         infer_beliefs, consist_error = encoder(model.region_graph)
         kikuchi_energy = encoder.kikuchi_energy(log_phis=model.log_phis,\
@@ -788,9 +793,31 @@ if __name__ == '__main__':
                                                 counts=model.region_graph.collect_region_count())
         loss = kikuchi_energy + 10 * consist_error
         loss.backward()
-        print(loss)
+        print(i,loss)
+        unary_marginals_enc_new, binary_marginals_enc_new =\
+            encoder.read_marginals(binary_idx=model.binary_idx,\
+                                   infer_beliefs=infer_beliefs, \
+                                   graph=model.region_graph)
+    
+        delta_unary = l2(unary_marginals_enc_new, unary_marginals_enc) 
+        delta_binary = l2(binary_marginals_enc_new[:, 1, 1], binary_marginals_enc[:, 1, 1])
+        delta = delta_unary + delta_binary
+        if delta < 1e-5:
+            break
+      
+        unary_marginals_enc = unary_marginals_enc_new.detach()
+        binary_marginals_enc = binary_marginals_enc_new.detach()
+    
         optimizer.step()
 
-    um, bm = encoder.read_marginals(binary_idx=model.binary_idx,\
-                                    infer_beliefs=infer_beliefs, \
-                                    graph=model.region_graph)
+    
+    
+    marginals = torch.cat([unary_marginals, binary_marginals[:, 1, 1]], 0)
+    marginals_enc = torch.cat([unary_marginals_enc, binary_marginals_enc[:, 1, 1]], 0)
+    corr_unary_enc = corr(unary_marginals, unary_marginals_enc)
+    corr_enc = corr(marginals, marginals_enc)
+    
+    l1_unary_enc = l1(unary_marginals, unary_marginals_enc)
+    l1_binary_enc = l1(binary_marginals[:, 1, 1], binary_marginals_enc[:, 1, 1])
+    l1_enc = l1(marginals, marginals_enc)
+    print(corr_enc, l1_enc)
