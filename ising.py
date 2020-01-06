@@ -198,6 +198,36 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
 
         return torch.stack(child_beliefs)
 
+    def read_marginals(self, binary_idx, infer_beliefs, graph):
+        """
+        Read out all the unary and binary marginals from optimized network.
+
+        """
+        # 1. read binary marginals from infer_beliefs first and put at corresponding position in
+        # binary_marginals
+        r1_nodes = graph.region_layers["R1"]
+        idx_map_list = [binary_idx.index(i) for i in r1_nodes]
+                
+        binary_marginals = torch.zeros(len(binary_idx), 2, 2)
+        # feed in the marginals from infer_beliefs
+        binary_marginals[idx_map_list] = infer_beliefs["R1"]
+        
+        # find the rest binary marginals
+        idx_diff = set(binary_idx).difference(set(r1_nodes))
+        for idx in idx_diff:
+            p_nodes = [i for i in graph.region_layers["R0"] if graph._is_subset(idx, i)]
+            p_beliefs_idx = [graph.region_layers["R0"].index(i) for i in p_nodes]
+            p_nodes_beliefs = infer_beliefs["R0"][p_beliefs_idx]
+            binary_marginals[binary_idx.index(idx)] = self.mgnl2child(p_nodes, idx, p_nodes_beliefs)
+
+        # compute the unary
+        unary_marginals_all = [[] for _ in range(self.n**2)]
+        for k, (i,j) in enumerate(binary_idx):            
+            binary_marginal = binary_marginals[k]
+            unary_marginals_all[i].append(binary_marginal.sum(1))
+            unary_marginals_all[j].append(binary_marginal.sum(0))            
+        unary_marginals = [torch.stack(unary, 0).mean(0)[1] for unary in unary_marginals_all]
+        return torch.stack(unary_marginals), binary_marginals
 
 
     def kikuchi_energy(self, log_phis, infer_beliefs, counts):
@@ -747,7 +777,7 @@ if __name__ == '__main__':
     model = Ising(10)
     log_Z = model.log_partition_ve()
     unary_marginals, binary_marginals = model.marginals()
-    region_graph = model.generate_region_graph()
+    model.generate_region_graph()
     encoder = GeneralizedInferenceNetwork(10, 60, 1, mlp_out_dim=2**4)
     optimizer = torch.optim.Adam(encoder.parameters(), lr=1e-3)
     for i in range(10):
@@ -760,3 +790,7 @@ if __name__ == '__main__':
         loss.backward()
         print(loss)
         optimizer.step()
+
+    um, bm = encoder.read_marginals(binary_idx=model.binary_idx,\
+                                    infer_beliefs=infer_beliefs, \
+                                    graph=model.region_graph)
