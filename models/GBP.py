@@ -3,11 +3,13 @@ from pgmpy.factors.discrete import PTDiscreteFactor
 
 class parent2child_algo(object):
     """The generalized belief propagation algorithm."""
-    def __init__(self, graph, n_iters=200):
+    def __init__(self, graph, n_iters=200, eps=1e-5):
         self._new_factor = PTDiscreteFactor
+        self.EPS = eps
         self.n_iters = n_iters # default number iteration
         self.graph = graph # the region graph to do inference on
-        # self._init_msgs()
+        
+        self._init_msgs()
         
         pass
 
@@ -22,27 +24,49 @@ class parent2child_algo(object):
             crdt = self.graph.nodes[child]['log_phi'].cardinality
             values = torch.ones_like(self.graph.nodes[child]['log_phi'].values)
             values = values / values.sum()
-            self.graph.edges[ie]['lg_msg'] = \
+            self.graph.edges[ie]['log_msg'] = \
+                self._new_factor([str(i) for i in child], \
+                                 crdt, \
+                                 values.log())
+            # 'old_msg' is used to monitor the convergence of algorithm
+            self.graph.edges[ie]['old_msg'] = \
                 self._new_factor([str(i) for i in child], \
                                  crdt, \
                                  values.log())
         return self
 
+    def check_converge(self):
+        """
+        Check if messages in graph have converged.
+        """
+        err = 0
+        for idx, ie in enumerate(self.graph.edges()):
+            diff = self.graph.edges[ie]['log_msg'].values.exp() - self.graph.edges[ie]['old_msg'].values.exp()
+            err += torch.abs(diff).mean()
+            self.graph.edges[ie]['old_msg'] = self.graph.edges[ie]['log_msg'] 
+        err = err / (idx+1)
+        print(err)
+        if err < self.EPS:
+            return True
+        else:
+            return False
         
-    def inference(self, region_graph):
+    
+    
+    def inference(self):
         """
         Propagate beliefs in region graph among regions.
         """
-        self.upate_msg(ie)
 
-        for _ in range(self.n_iters):
+        for i in range(self.n_iters):
             # propagate messages        
-            for idx, ie in region_graph.get_edges():
-                self.upate_msg(ie)
-
-            if self.check_converge(region_graph):
+            for ie in self.graph.edges():
+                self.update_msg(ie)
+            print(i)
+            if self.check_converge():
                 break
 
+        print(i)
         return self
 
     def read_beliefs(self, graph):
@@ -61,38 +85,59 @@ class parent2child_algo(object):
         set_D = self.get_set_D(edge)
 
         
-        accumulate_msg = self.graph.nodes[edge[1]]['log_msg'].copy()
+        accumulate_msg = self.graph.nodes[edge[1]]['log_phi'].copy()
         accumulate_msg.values.zero_()
 
         for arc in set_N:
-            accumulate_msg.sum(self.graph.edges[arc]['lg_msg'], inplace=True)
+            accumulate_msg.sum(self.graph.edges[arc]['log_msg'], inplace=True)
 
         accumulate_msg.sum(factor_prod, inplace=True)
 
+
         for arc in set_D:
-            accumulate_msg.sum(self.graph.edges[arc]['lg_msg'], inplace=True, minus=True)
+            accumulate_msg.sum(self.graph.edges[arc]['log_msg'], inplace=True, minus=True)
+
+
+        # To real domain
+        accumulate_msg.values = accumulate_msg.values.exp()
+
+        if torch.any(accumulate_msg.values <= 0).item() != False:
+            accumulate_msg.values[accumulate_msg.values == 0] = self.EPS
+            
 
         # marginalize set
         parent, child = edge
         to_be_marginalize = list(set(parent) - set(child))
-        # to real domain
-        accumulate_msg.values = accumulate_msg.values.log()
-        # marginalize
-        accumulate.msg.marginalize(to_be_marginalize)
-        # back to log domain
-        accumulate_msg.values = accumulate_msg.values.exp()
-        # normalization
-        accumulate_msg.normalize(inplace=True, log_domain=True)
+        accumulate_msg.marginalize([str(i) for i in to_be_marginalize], inplace=True)
 
+
+        if torch.any(accumulate_msg.values <= 0).item() != False:
+            print('err')
+        # normalization
+        accumulate_msg.normalize(inplace=True, log_domain=False)
+
+        # all msg should be positive
+        # if torch.any(accumulate_msg.values <= 0) != False:
+        #     print('err')
+
+        # back to log domain
+        accumulate_msg.values = self._safe_log(accumulate_msg.values)
+        
         assert accumulate_msg.variables == self.graph.edges[edge]["log_msg"].variables
+        assert torch.isnan(accumulate_msg.values).sum() == 0
         self.graph.edges[edge]["log_msg"] = accumulate_msg
+        
 
         return self
 
+    def _safe_log(self, value):
+        value[torch.isclose(value, torch.zeros(1))] = self.EPS
+        return value.log()
+
     def get_divided_factor(self, edge):
         parent, child = edge
-        factor_parent = self.graph.nodes[parent]["log_msg"]
-        factor_child = self.graph.nodes[child]["log_msg"]
+        factor_parent = self.graph.nodes[parent]["log_phi"]
+        factor_child = self.graph.nodes[child]["log_phi"]
         # factors are in log domain
         factor_div = factor_parent.sum(factor_child, inplace=False, minus=True)
         return factor_div
