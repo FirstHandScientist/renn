@@ -5,7 +5,7 @@ import itertools
 import numpy as np
 import math
 from pgmpy.models import RegionGraph
-from pgmpy.factors.discrete import DiscreteFactor
+from pgmpy.factors.discrete import PTDiscreteFactor
 
 
 def logadd(x, y):
@@ -236,7 +236,7 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
         for key, beliefs in infer_beliefs.items():
             num_regions = beliefs.size(0)
             beliefs = beliefs.reshape(num_regions, -1)
-            lphi = torch.from_numpy(log_phis[key]).reshape(num_regions, -1).type(beliefs.dtype)
+            lphi = log_phis[key].reshape(num_regions, -1).type(beliefs.dtype).detach()
             regions_energy = torch.sum(beliefs * (beliefs.log() - lphi), dim=1)
             layer_counts = torch.from_numpy(counts[key]).type(beliefs.dtype)
             energy += (layer_counts * regions_energy).sum()
@@ -272,7 +272,7 @@ class Ising(nn.Module):
         # bethe free energy computation of unary part
         self.log_unary_factors = {}
         for i in range(len(unary)):
-            self.log_unary_factors[(i,)] = DiscreteFactor([str(i)], [2], torch.stack([unary0[i], unary1[i]], 0).data.numpy())
+            self.log_unary_factors[(i,)] = PTDiscreteFactor([str(i)], [2], torch.stack([unary0[i], unary1[i]], 0))
         
         
         
@@ -281,7 +281,7 @@ class Ising(nn.Module):
             binary_factor = binary[i][j] # J_ij
             binary_factor = torch.stack([binary_factor, -binary_factor], 0)
             binary_factor = torch.stack([binary_factor, -binary_factor], 1) # 2 x 2
-            d_binary_factor = DiscreteFactor([str(i), str(j)], [2,2], binary_factor.data.numpy())
+            d_binary_factor = PTDiscreteFactor([str(i), str(j)], [2,2], binary_factor)
             self.log_binary_factors[(i,j)] = d_binary_factor
             self.log_binary_factors[(j,i)] = d_binary_factor
 
@@ -331,7 +331,7 @@ class Ising(nn.Module):
                     print("error")
 
         for key, value in self.log_phis.items():
-            self.log_phis[key] = np.array(value)
+            self.log_phis[key] = torch.stack(value)
         
         return self
 
@@ -342,9 +342,9 @@ class Ising(nn.Module):
         
         Output: DiscreteFactor 
         """
-        region_sum = DiscreteFactor(tuple([str(i) for i in node]), \
+        region_sum = PTDiscreteFactor(tuple([str(i) for i in node]), \
                                     [2] * len(node), \
-                                    np.zeros(2 ** len(node)))
+                                    torch.zeros(2 ** len(node)))
         if len(node) ==1:
             region_sum.sum(self.log_unary_factors[node], inplace=True)
             return region_sum
@@ -793,21 +793,23 @@ if __name__ == '__main__':
                                                 counts=model.region_graph.collect_region_count())
         loss = kikuchi_energy + 10 * consist_error
         loss.backward()
-        print(i,loss)
-        unary_marginals_enc_new, binary_marginals_enc_new =\
-            encoder.read_marginals(binary_idx=model.binary_idx,\
-                                   infer_beliefs=infer_beliefs, \
-                                   graph=model.region_graph)
-    
-        delta_unary = l2(unary_marginals_enc_new, unary_marginals_enc) 
-        delta_binary = l2(binary_marginals_enc_new[:, 1, 1], binary_marginals_enc[:, 1, 1])
-        delta = delta_unary + delta_binary
-        if delta < 1e-5:
-            break
-      
-        unary_marginals_enc = unary_marginals_enc_new.detach()
-        binary_marginals_enc = binary_marginals_enc_new.detach()
-    
+
+        with torch.no_grad():
+            print(i,loss)
+            unary_marginals_enc_new, binary_marginals_enc_new =\
+                encoder.read_marginals(binary_idx=model.binary_idx,\
+                                       infer_beliefs=infer_beliefs, \
+                                       graph=model.region_graph)
+
+            delta_unary = l2(unary_marginals_enc_new, unary_marginals_enc) 
+            delta_binary = l2(binary_marginals_enc_new[:, 1, 1], binary_marginals_enc[:, 1, 1])
+            delta = delta_unary + delta_binary
+            if delta < 1e-5:
+                break
+
+            unary_marginals_enc = unary_marginals_enc_new.detach()
+            binary_marginals_enc = binary_marginals_enc_new.detach()
+
         optimizer.step()
 
     
