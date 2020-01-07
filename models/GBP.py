@@ -56,15 +56,46 @@ class parent2child_algo(object):
         Update the message along the input edge.
         
         """
-        parent, child = edge
-        
-        set_N = self.get_set_N(parent, child)
-        set_D = self.get_set_D(descendants_parent, descendants_child)
+        factor_prod = self.get_divided_factor(edge)
+        set_N = self.get_set_N(edge)
+        set_D = self.get_set_D(edge)
 
-        # get N set
-        # get D set
         
-        pass
+        accumulate_msg = self.graph.nodes[edge[1]]['log_msg'].copy()
+        accumulate_msg.values.zero_()
+
+        for arc in set_N:
+            accumulate_msg.sum(self.graph.edges[arc]['lg_msg'], inplace=True)
+
+        accumulate_msg.sum(factor_prod, inplace=True)
+
+        for arc in set_D:
+            accumulate_msg.sum(self.graph.edges[arc]['lg_msg'], inplace=True, minus=True)
+
+        # marginalize set
+        parent, child = edge
+        to_be_marginalize = list(set(parent) - set(child))
+        # to real domain
+        accumulate_msg.values = accumulate_msg.values.log()
+        # marginalize
+        accumulate.msg.marginalize(to_be_marginalize)
+        # back to log domain
+        accumulate_msg.values = accumulate_msg.values.exp()
+        # normalization
+        accumulate_msg.normalize(inplace=True, log_domain=True)
+
+        assert accumulate_msg.variables == self.graph.edges[edge]["log_msg"].variables
+        self.graph.edges[edge]["log_msg"] = accumulate_msg
+
+        return self
+
+    def get_divided_factor(self, edge):
+        parent, child = edge
+        factor_parent = self.graph.nodes[parent]["log_msg"]
+        factor_child = self.graph.nodes[child]["log_msg"]
+        # factors are in log domain
+        factor_div = factor_parent.sum(factor_child, inplace=False, minus=True)
+        return factor_div
 
     def get_set_N(self, edge):
 
