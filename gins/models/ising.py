@@ -58,6 +58,7 @@ class TransformerInferenceNetwork(nn.Module):
     def __init__(self, n, state_dim = 100, num_layers = 1, mlp_out_dim=4):
         super(TransformerInferenceNetwork, self).__init__()
         self.n = n
+        self.device = 'cpu'
         self.node_emb = nn.Parameter(torch.randn(1, n**2, state_dim))
         self.attn_layers = nn.ModuleList([SelfAttention(state_dim) for _ in range(num_layers)])
         local_times = int(math.log(mlp_out_dim,2))
