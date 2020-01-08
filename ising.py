@@ -309,7 +309,21 @@ class Ising(nn.Module):
         
         # calculate the factor for each region and attach to graph
         self.attach_region_factors(graph)
+        self.attach_edge_factors(graph)
         self.region_graph = graph
+        return self
+
+    def attach_edge_factors(self, graph):
+        """
+        Attach the log factors that in parent node but not in child node.
+        These factors are only used for parent-child algorithm.
+        """
+        for ie in graph.edges():
+            parent, child = ie
+            candidate = list(set(parent) - set(child))
+            candidate = tuple(sorted(candidate))
+            graph.edges[ie]['PxC'] = self._region_factor(candidate)
+
         return self
 
     def attach_region_factors(self, graph):
@@ -317,7 +331,7 @@ class Ising(nn.Module):
         Input: Graph
         Output: the region graph factors
         """
-        if not hasattr(self, "log_layer_phi"):
+        if not hasattr(self, "log_phi"):
             self.log_phis = {}
             
         for ri, regions in graph.region_layers.items():
