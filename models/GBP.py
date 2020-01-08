@@ -3,7 +3,7 @@ from pgmpy.factors.discrete import PTDiscreteFactor
 
 class parent2child_algo(object):
     """The generalized belief propagation algorithm."""
-    def __init__(self, graph, n_iters=200, eps=1e-5):
+    def __init__(self, graph, n_iters=2, eps=1e-5):
         self._new_factor = PTDiscreteFactor
         self.EPS = eps
         self.n_iters = n_iters # default number iteration
@@ -73,11 +73,58 @@ class parent2child_algo(object):
         print(i)
         return self
 
-    def read_beliefs(self, graph):
+    def read_beliefs(self):
         """
         Read out the marginals/beliefs given the region graph.
         """
-        pass
+        # iter through each node in region graph to create the beliefs
+        for node in self.graph.nodes:
+            self.graph.nodes[node]['belief'] = self.gather_node_belief(node)
+
+        return
+
+    def gather_node_belief(self, node):
+        """
+        Gather belief for each node in graph from the computed messages.
+        """
+        # accumulate the f_a
+        belief = self.graph.nodes[node]['log_phi'].copy()
+
+        # accumulate msgs from parents
+        for p_node in self.graph.get_parents(node):
+            log_msg = self.graph.edges[(p_node, node)]['log_msg']
+            belief.sum(log_msg, inplace=True)
+
+        # accumulate msgs in belief_descendant_set
+        for pair in self.belief_descendant_set(node):
+            p_node, c_node = pair
+            log_msg = self.graph.edges[(p_node, c_node)]['log_msg']
+            belief.sum(log_msg, inplace=True)
+
+        assert belief.variables == self.graph.nodes[node]['log_phi'].variables
+        belief.to_real()
+
+        return belief
+
+    def belief_descendant_set(self, node):
+        """
+        Get the pairs (sender, receiver) such that:
+        receiver in descendants of node;
+        sender is a parent of receiver, but not the node, either in descendants of the node.
+
+        """
+        descendants = self.graph.get_descendants_of([node], discard_self=True)
+        descendants_and_self = self.graph.get_descendants_of([node], discard_self=False)
+
+        candidate_set = set()
+        for d_node in descendants:
+            parents = self.graph.get_parents(d_node)
+            for p_node in parents:
+                if p_node not in descendants_and_self:
+                    candidate_set.add((p_node, d_node))
+
+        return list(candidate_set)
+    
 
     def update_msg(self, edge):
         """
@@ -217,6 +264,15 @@ if __name__ == "__main__":
     
     print('n', gbp.get_set_N((('1','2','4', '6'), ('1','2'))))
     print('d', gbp.get_set_D((('1','2','4', '6'), ('1','2'))))
+
+    print('belief set:', gbp.belief_descendant_set(('1','2','3', '5')))
+    print('belief set:', gbp.belief_descendant_set(('1','2','4', '6')))
+    print('belief set:', gbp.belief_descendant_set(('1','3','4', '7')))
+    print('belief set:', gbp.belief_descendant_set(('1','2')))
+    print('belief set:', gbp.belief_descendant_set(('1','3')))
+
+
+
 
 
     
