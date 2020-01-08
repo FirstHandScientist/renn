@@ -22,7 +22,8 @@ class parent2child_algo(object):
         for ie in self.graph.edges():
             child = ie[-1]
             crdt = self.graph.nodes[child]['log_phi'].cardinality
-            values = torch.ones_like(self.graph.nodes[child]['log_phi'].values)
+            values = torch.ones_like(self.graph.nodes[child]['log_phi'].values) + \
+                torch.randn_like(self.graph.nodes[child]['log_phi'].values) * 0.001
             values = values / values.sum()
             self.graph.edges[ie]['log_msg'] = \
                 self._new_factor([str(i) for i in child], \
@@ -43,13 +44,14 @@ class parent2child_algo(object):
         for idx, ie in enumerate(self.graph.edges()):
             diff = self.graph.edges[ie]['log_msg'].values.exp() - self.graph.edges[ie]['old_msg'].values.exp()
             err += torch.abs(diff).mean()
-            self.graph.edges[ie]['old_msg'] = self.graph.edges[ie]['log_msg'] 
+            self.graph.edges[ie]['old_msg'].values = self.graph.edges[ie]['log_msg'].values.detach()
         err = err / (idx+1)
         print(err)
-        if err < self.EPS:
+        if err < self.EPS/100:
             return True
         else:
             return False
+        
         
     
     
@@ -59,9 +61,11 @@ class parent2child_algo(object):
         """
 
         for i in range(self.n_iters):
-            # propagate messages        
+            # propagate messages
             for ie in self.graph.edges():
                 self.update_msg(ie)
+            
+            
             print(i)
             if self.check_converge():
                 break
@@ -80,52 +84,51 @@ class parent2child_algo(object):
         Update the message along the input edge.
         
         """
-        factor_prod = self.get_divided_factor(edge)
+        
+        factor_PxC = self.graph.edges[edge]['PxC']
+        factor_prod = factor_PxC #self.get_divided_factor(edge)
         set_N = self.get_set_N(edge)
         set_D = self.get_set_D(edge)
 
         
-        accumulate_msg = self.graph.nodes[edge[1]]['log_phi'].copy()
+        accumulate_msg = self.graph.edges[edge]['log_msg'].copy()
         accumulate_msg.values.zero_()
-
+        # accumulate the set of N
         for arc in set_N:
+            # assert  accumulate_msg.var
             accumulate_msg.sum(self.graph.edges[arc]['log_msg'], inplace=True)
 
+        # accumulate the factor A_P\A_R
         accumulate_msg.sum(factor_prod, inplace=True)
 
-
-        for arc in set_D:
-            accumulate_msg.sum(self.graph.edges[arc]['log_msg'], inplace=True, minus=True)
-
-
+        # do marginals here
         # To real domain
         accumulate_msg.values = accumulate_msg.values.exp()
-
-        if torch.any(accumulate_msg.values <= 0).item() != False:
-            accumulate_msg.values[accumulate_msg.values == 0] = self.EPS
-            
 
         # marginalize set
         parent, child = edge
         to_be_marginalize = list(set(parent) - set(child))
         accumulate_msg.marginalize([str(i) for i in to_be_marginalize], inplace=True)
+        
+        # back To log domain
+        accumulate_msg.values = accumulate_msg.values.log()
+
+        # accumulate the set of D
+        for arc in set_D:
+            accumulate_msg.sum(self.graph.edges[arc]['log_msg'], inplace=True, minus=True)
 
 
-        if torch.any(accumulate_msg.values <= 0).item() != False:
-            print('err')
-        # normalization
-        accumulate_msg.normalize(inplace=True, log_domain=False)
+        # normalization in log domain
+        accumulate_msg.normalize(inplace=True, log_domain=True)
 
         # all msg should be positive
         # if torch.any(accumulate_msg.values <= 0) != False:
         #     print('err')
 
-        # back to log domain
-        accumulate_msg.values = self._safe_log(accumulate_msg.values)
         
         assert accumulate_msg.variables == self.graph.edges[edge]["log_msg"].variables
         assert torch.isnan(accumulate_msg.values).sum() == 0
-        self.graph.edges[edge]["log_msg"] = accumulate_msg
+        self.graph.edges[edge]["log_msg"].values = accumulate_msg.values.detach()
         
 
         return self
@@ -140,6 +143,10 @@ class parent2child_algo(object):
         factor_child = self.graph.nodes[child]["log_phi"]
         # factors are in log domain
         factor_div = factor_parent.sum(factor_child, inplace=False, minus=True)
+        factor_div.to_real()
+        factor_div.marginalize(factor_child.variables, inplace=True)
+        
+        factor_div.to_log()
         return factor_div
 
     def get_set_N(self, edge):
