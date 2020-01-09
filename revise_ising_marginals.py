@@ -1,6 +1,5 @@
 import sys
 import os
-
 import argparse
 import json
 import random
@@ -13,11 +12,13 @@ import numpy as np
 import time
 import logging
 import pandas as pd
-from gins.models import ising as ising_models
 from torch.nn.init import xavier_uniform_
-
-from gins.utils.utils import corr, l2, l1, get_scores
 from functools import partial
+
+from gins.models import ising as ising_models
+from gins.models.GBP import parent2child_algo 
+from gins.utils.utils import corr, l2, l1, get_scores, binary2unary_marginals
+
 
 # Model options
 parser = argparse.ArgumentParser()
@@ -73,6 +74,38 @@ def bp_infer(ising, msg_iters, solver, optmz_alpha=False):
     log_Z_lbp = -ising.bethe_energy(unary_marginals_lbp, binary_marginals_lbp)
 
     return log_Z_lbp, unary_marginals_lbp, binary_marginals_lbp
+
+def p2cbp_infer(ising, args):
+    """
+    Generalized BP, the parent2child algorithm.
+    """
+    model = ising
+    model.generate_region_graph()
+    
+    gbp = parent2child_algo(graph=model.region_graph)
+    gbp.inference()
+    gbp.read_beliefs()
+    binary_marginals = torch.FloatTensor(len(model.binary_idx), 2, 2)
+    for idx, pair in enumerate(model.binary_idx):
+        if pair in gbp.graph.region_layers["R1"]:
+            # for already gathered belief in gbp
+            binary_marginals[idx] = gbp.graph.nodes[pair]['belief'].values
+        else:
+            # for belief not gathered in gbp
+            pair_belief = 0
+            parents_of_pair = gbp.graph.get_supernode_of(pair)
+            for p_node in parents_of_pair:
+                to_marginal_idx = tuple(sorted(set(p_node) - set(pair)))
+                p_belief = gbp.graph.nodes[p_node]['belief'].copy()
+                p_belief.marginalize([str(i) for i in to_marginal_idx], inplace=True)
+                p_belief.normalize(inplace=True)
+                pair_belief += p_belief.values
+
+            binary_marginals[idx] = pair_belief / len(parents_of_pair)
+            
+    unary_marginals = binary2unary_marginals(model.binary_idx, binary_marginals, model.n)
+    
+    return (None, unary_marginals, binary_marginals)
 
 
 def mean_field_infer(ising, args):
@@ -212,6 +245,13 @@ def run_marginal_exp(args, seed=3435, verbose=True):
         all_scores['abp'] = {'l1': scores_abp[0], 'corr': scores_abp[1]}
         print('Finish {} ...'.format('alpha bp'))
 
+    # Generalized belief propagation
+    if 'gbp' in args.method:
+        mrgnl_gbp = p2cbp_infer(ising, args)
+        scores_gbp = p_get_scores(test_ub=(mrgnl_gbp[1].to(unary_marginals), mrgnl_gbp[2].to(unary_marginals)))
+        all_scores['gbp'] = {'l1': scores_gbp[0], 'corr': scores_gbp[1]}
+        print('Finish {} ...'.format('gbp'))
+
     # Bethe net
     if 'bethe' in args.method:
         mrgnl_bethe = bethe_net_infer(ising, args)
@@ -235,9 +275,9 @@ def run_marginal_exp(args, seed=3435, verbose=True):
 if __name__ == '__main__':
     args = parser.parse_args()
     # run multiple number of experiments, and collect the stats of performance.
-    args.method = ['mf', 'bp', 'bethe', 'kikuchi']
+    # args.method = ['mf', 'bp', 'bethe', 'kikuchi']
 
-    # args.method = ['kikuchi']
+    args.method = ['gbp']
 
     args.device = 'cuda:0'
     
