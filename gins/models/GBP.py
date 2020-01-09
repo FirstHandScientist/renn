@@ -1,15 +1,18 @@
 import torch
 from pgmpy.factors.discrete import PTDiscreteFactor
+import numpy
+from random import shuffle
 
 class parent2child_algo(object):
     """The generalized belief propagation algorithm."""
-    def __init__(self, graph, n_iters=2, eps=1e-5):
+    def __init__(self, graph, n_iters=100, eps=1e-5):
         self._new_factor = PTDiscreteFactor
         self.EPS = eps
         self.n_iters = n_iters # default number iteration
         self.graph = graph # the region graph to do inference on
         
         self._init_msgs()
+        self.graph_edges = [edge for edge in self.graph.edges()]
         
         pass
 
@@ -22,8 +25,7 @@ class parent2child_algo(object):
         for ie in self.graph.edges():
             child = ie[-1]
             crdt = self.graph.nodes[child]['log_phi'].cardinality
-            values = torch.ones_like(self.graph.nodes[child]['log_phi'].values) + \
-                torch.randn_like(self.graph.nodes[child]['log_phi'].values) * 0.001
+            values = torch.randn(self.graph.nodes[child]['log_phi'].values.size()).abs() 
             values = values / values.sum()
             self.graph.edges[ie]['log_msg'] = \
                 self._new_factor([str(i) for i in child], \
@@ -44,10 +46,10 @@ class parent2child_algo(object):
         for idx, ie in enumerate(self.graph.edges()):
             diff = self.graph.edges[ie]['log_msg'].values.exp() - self.graph.edges[ie]['old_msg'].values.exp()
             err += torch.abs(diff).mean()
-            self.graph.edges[ie]['old_msg'].values = self.graph.edges[ie]['log_msg'].values.detach()
+            self.graph.edges[ie]['old_msg'].values = self.graph.edges[ie]['log_msg'].values.clone()
         err = err / (idx+1)
         print(err)
-        if err < self.EPS/100:
+        if err < self.EPS:
             return True
         else:
             return False
@@ -62,8 +64,10 @@ class parent2child_algo(object):
 
         for i in range(self.n_iters):
             # propagate messages
-            for ie in self.graph.edges():
-                self.update_msg(ie)
+            
+            for ie in numpy.random.permutation(range(len(self.graph_edges))):
+                
+                self.update_msg(self.graph_edges[ie])
             
             
             print(i)
@@ -103,6 +107,7 @@ class parent2child_algo(object):
 
         assert belief.variables == self.graph.nodes[node]['log_phi'].variables
         belief.to_real()
+        belief.normalize(inplace=True)
 
         return belief
 
@@ -132,7 +137,7 @@ class parent2child_algo(object):
         
         """
         
-        factor_PxC = self.graph.edges[edge]['PxC']
+        factor_PxC = self.graph.edges[edge]['PxC'].copy()
         factor_prod = factor_PxC #self.get_divided_factor(edge)
         set_N = self.get_set_N(edge)
         set_D = self.get_set_D(edge)
@@ -150,7 +155,7 @@ class parent2child_algo(object):
 
         # do marginals here
         # To real domain
-        accumulate_msg.values = accumulate_msg.values.exp()
+        accumulate_msg.to_real()
 
         # marginalize set
         parent, child = edge
@@ -158,7 +163,7 @@ class parent2child_algo(object):
         accumulate_msg.marginalize([str(i) for i in to_be_marginalize], inplace=True)
         
         # back To log domain
-        accumulate_msg.values = accumulate_msg.values.log()
+        accumulate_msg.to_log()
 
         # accumulate the set of D
         for arc in set_D:
@@ -175,7 +180,14 @@ class parent2child_algo(object):
         
         assert accumulate_msg.variables == self.graph.edges[edge]["log_msg"].variables
         assert torch.isnan(accumulate_msg.values).sum() == 0
-        self.graph.edges[edge]["log_msg"].values = accumulate_msg.values.detach()
+        
+        # update msg
+        accumulate_msg.to_real()
+        self.graph.edges[edge]["log_msg"].to_real()
+        self.graph.edges[edge]["log_msg"].sum(accumulate_msg)
+        
+        self.graph.edges[edge]['log_msg'].normalize(inplace=True, log_domain=False)
+        self.graph.edges[edge]['log_msg'].to_log()
         
 
         return self
