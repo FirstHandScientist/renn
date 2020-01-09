@@ -48,7 +48,7 @@ class parent2child_algo(object):
             err += torch.abs(diff).mean()
             self.graph.edges[ie]['old_msg'].values = self.graph.edges[ie]['log_msg'].values.clone()
         err = err / (idx+1)
-        print(err)
+        # print(err)
         if err < self.EPS:
             return True
         else:
@@ -70,7 +70,7 @@ class parent2child_algo(object):
                 self.update_msg(self.graph_edges[ie])
             
             
-            print(i)
+            # print(i)
             if self.check_converge():
                 break
 
@@ -184,7 +184,7 @@ class parent2child_algo(object):
         # update msg
         accumulate_msg.to_real()
         self.graph.edges[edge]["log_msg"].to_real()
-        self.graph.edges[edge]["log_msg"].sum(accumulate_msg)
+        self.graph.edges[edge]["log_msg"].sum(accumulate_msg, inplace=True, minus=False)
         
         self.graph.edges[edge]['log_msg'].normalize(inplace=True, log_domain=False)
         self.graph.edges[edge]['log_msg'].to_log()
@@ -282,6 +282,8 @@ if __name__ == "__main__":
     print('belief set:', gbp.belief_descendant_set(('1','3','4', '7')))
     print('belief set:', gbp.belief_descendant_set(('1','2')))
     print('belief set:', gbp.belief_descendant_set(('1','3')))
+    print('belief set:', gbp.belief_descendant_set(('1',)))
+
 
 
 
