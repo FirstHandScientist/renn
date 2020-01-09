@@ -33,3 +33,15 @@ def get_scores(true_ub, test_ub):
     l1_mf = l1(marginals, marginals_mf)
 
     return (l1_mf, corr_mf)
+
+
+def binary2unary_marginals(binary_idx, binary_marginals, n):
+
+    unary_marginals_all = [[] for _ in range(n**2)]
+    for k, (i,j) in enumerate(binary_idx):            
+        binary_marginal = binary_marginals[k]
+        unary_marginals_all[i].append(binary_marginal.sum(1))
+        unary_marginals_all[j].append(binary_marginal.sum(0))            
+    unary_marginals = [torch.stack(unary, 0).mean(0)[1] for unary in unary_marginals_all]
+    
+    return torch.stack(unary_marginals, 0)
