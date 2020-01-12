@@ -4,9 +4,11 @@ import torch.nn.functional as F
 import itertools
 import numpy as np
 import math
+import pickle
+import networkx as nx
 from pgmpy.models import RegionGraph
 from pgmpy.factors.discrete import PTDiscreteFactor
-
+from gins.utils.spanning_tree import edge_appear_rate
 
 def logadd(x, y):
     d = torch.max(x,y)  
@@ -252,7 +254,7 @@ class Ising(nn.Module):
         self.n = n
         self.unary = nn.Parameter(torch.randn(n**2))
         self.binary = nn.Parameter(torch.randn(n**2, n**2))
-        self.alpha_wgt = nn.Parameter(torch.randn(n**2, n**2) * 0.05 + 0.9)
+        self.alpha_wgt = nn.Parameter(torch.randn(n**2, n**2) * 0.0 + 0.9)
         self.mask = self.binary_mask(n)
         self.binary_idx = []
         for i in range(n**2):
@@ -618,6 +620,39 @@ class Ising(nn.Module):
             updated_message.append(message.detach())
         return torch.stack(updated_message)
 
+    def trbp_update_node(self, n, unary, binary, messages, edge_rate):
+        '''Update the messages sent from node n to its neighbors'''
+        updated_message = []
+        for k in self.neighbors[n]:
+            # compute the message from node n to its neighbor k
+            unary_factor = torch.stack([-unary[n], unary[n]], 0) # 2
+            # why this comparison ?
+            if n < k:
+                binary_factor = binary[n][k]
+                edge_weight = edge_rate[n,k]
+            else:
+                binary_factor = binary[k][n]
+                edge_weight = edge_rate[k,n]
+
+
+            old_message_kn = messages[k][n] + self.EPS
+
+            binary_factor = torch.stack([binary_factor, -binary_factor], 0)
+            binary_factor = torch.stack([binary_factor, -binary_factor], 1) # 2 x 2
+            messages_jn = []
+            for j in self.neighbors[n]:
+                if j != k:
+                    messages_jn.append(messages[j][n].log()) # 2
+            messages_jn = torch.stack(messages_jn, 0).sum(0)# 2
+            message = messages_jn * edge_weight + unary_factor
+            message = message.unsqueeze(1) + \
+                binary_factor * (1/edge_weight) + \
+                old_message_kn.unsqueeze(1).log() * (edge_weight - 1)
+            log_message = logsumexp(message, 0) # 2
+            message = F.softmax(log_message, dim = 0)
+            updated_message.append(message.detach())
+        return torch.stack(updated_message)
+
 
     def alphabp_update_node(self, n, unary, binary, messages):
         '''Update the messages sent from node n to its neighbors'''
@@ -647,8 +682,9 @@ class Ising(nn.Module):
 
             message = message.unsqueeze(1) \
                 + binary_factor * alpha \
-                + old_message_kn.log() * (1 - alpha)
+                + old_message_kn.unsqueeze(1).log() * (1 - alpha)
             log_message = logsumexp(message, 0) # 2
+            # log_message = torch.log(log_message.exp() / log_message.exp().sum())
             log_message = log_message + old_message_nk.log() * (1 - alpha)
             # normalize and convert to real domain 
             message = F.softmax(log_message, dim = 0)
@@ -657,6 +693,34 @@ class Ising(nn.Module):
                 print("Encounter nan in message update...")
             updated_message.append(message)
         return torch.stack(updated_message)
+
+    def trbp_update(self, num_iters = 1, messages = None):
+        binary = self.binary*self.mask
+        unary = self.unary
+        edge_file = 'edge_rate_n{}.pkl'.format(self.n)
+        if not os.path.isfile(edge_file):
+            # compute the rate
+            grid_graph = nx.Graph()
+            grid_graph.add_nodes_from([i_node for i_node in range(self.n ** 2)])
+            grid_graph.add_edges_from(self.binary_idx)
+            edge_rate = edge_apprear_rate(grid_graph)
+            with open(edge_file, 'wb') as f:
+                pickle.dump(edge_rate, f)
+            
+        else:
+            with open(edge_file, 'rb') as f:
+                edge_rate = pickle.load(f)
+        # load edge rate
+        # else compute it
+        if messages is None:
+            messages = self.unary.new(self.n**2, self.n**2, 2).fill_(0.5)
+        for _ in range(num_iters):
+            for n in np.random.permutation(range(self.n**2)):
+                # update message from node n to its neighbors
+                messages[n][self.neighbors[n]] = self.trbp_update_node(n, unary, binary, messages, edge_rate)
+                
+        return messages
+        
 
     def lbp_update(self, num_iters = 1, messages = None, damp=1.):
         binary = self.binary*self.mask
