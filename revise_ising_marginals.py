@@ -82,7 +82,7 @@ def p2cbp_infer(ising, args):
     model = ising
     model.generate_region_graph()
     
-    gbp = parent2child_algo(graph=model.region_graph)
+    gbp = parent2child_algo(graph=model.region_graph, n_iters=args.msg_iters)
     gbp.inference()
     gbp.read_beliefs()
     binary_marginals = torch.FloatTensor(len(model.binary_idx), 2, 2)
@@ -94,6 +94,7 @@ def p2cbp_infer(ising, args):
             # for belief not gathered in gbp
             pair_belief = 0
             parents_of_pair = gbp.graph.get_supernode_of(pair)
+            assert len(parents_of_pair)==1
             for p_node in parents_of_pair:
                 to_marginal_idx = tuple(sorted(set(p_node) - set(pair)))
                 p_belief = gbp.graph.nodes[p_node]['belief'].copy()
@@ -275,9 +276,9 @@ def run_marginal_exp(args, seed=3435, verbose=True):
 if __name__ == '__main__':
     args = parser.parse_args()
     # run multiple number of experiments, and collect the stats of performance.
-    # args.method = ['mf', 'bp', 'bethe', 'kikuchi']
+    # args.method = ['mf', 'bp', 'gbp', 'bethe', 'kikuchi']
 
-    args.method = ['gbp']
+    args.method = ['mf', 'bp']
 
     args.device = 'cuda:0'
     
