@@ -252,7 +252,7 @@ class Ising(nn.Module):
         self.n = n
         self.unary = nn.Parameter(torch.randn(n**2))
         self.binary = nn.Parameter(torch.randn(n**2, n**2))
-        self.alpha_wgt = nn.Parameter(torch.randn(n**2, n**2) * 0.1 + 1)
+        self.alpha_wgt = nn.Parameter(torch.randn(n**2, n**2) * 0.05 + 0.9)
         self.mask = self.binary_mask(n)
         self.binary_idx = []
         for i in range(n**2):
@@ -613,7 +613,7 @@ class Ising(nn.Module):
             messages_jn = torch.stack(messages_jn, 0).sum(0)# 2
             message = messages_jn + unary_factor
             message = message.unsqueeze(1) + binary_factor 
-            log_message = logsumexp(message, 0) * damp + old_message_nk * (1-damp) # 2
+            log_message = logsumexp(message, 0) * damp + old_message_nk.log() * (1-damp) # 2
             message = F.softmax(log_message, dim = 0)
             updated_message.append(message.detach())
         return torch.stack(updated_message)
