@@ -252,7 +252,7 @@ class Ising(nn.Module):
         self.n = n
         self.unary = nn.Parameter(torch.randn(n**2))
         self.binary = nn.Parameter(torch.randn(n**2, n**2))
-        self.alpha_wgt = nn.Parameter(torch.randn(n**2, n**2) * 0.01 + 1)
+        self.alpha_wgt = nn.Parameter(torch.randn(n**2, n**2) * 0.1 + 1)
         self.mask = self.binary_mask(n)
         self.binary_idx = []
         for i in range(n**2):
@@ -590,7 +590,7 @@ class Ising(nn.Module):
             binary_marginals.append(binary_marginal)
         return torch.stack(binary_marginals, 0)
     
-    def lbp_update_node(self, n, unary, binary, messages):
+    def lbp_update_node(self, n, unary, binary, messages, damp=1.):
         '''Update the messages sent from node n to its neighbors'''
         updated_message = []
         for k in self.neighbors[n]:
@@ -601,6 +601,9 @@ class Ising(nn.Module):
                 binary_factor = binary[n][k]
             else:
                 binary_factor = binary[k][n]
+
+            old_message_nk = messages[n][k] + self.EPS
+
             binary_factor = torch.stack([binary_factor, -binary_factor], 0)
             binary_factor = torch.stack([binary_factor, -binary_factor], 1) # 2 x 2
             messages_jn = []
@@ -610,7 +613,7 @@ class Ising(nn.Module):
             messages_jn = torch.stack(messages_jn, 0).sum(0)# 2
             message = messages_jn + unary_factor
             message = message.unsqueeze(1) + binary_factor 
-            log_message = logsumexp(message, 0) # 2
+            log_message = logsumexp(message, 0) * damp + old_message_nk * (1-damp) # 2
             message = F.softmax(log_message, dim = 0)
             updated_message.append(message.detach())
         return torch.stack(updated_message)
@@ -655,7 +658,7 @@ class Ising(nn.Module):
             updated_message.append(message)
         return torch.stack(updated_message)
 
-    def lbp_update(self, num_iters = 1, messages = None):
+    def lbp_update(self, num_iters = 1, messages = None, damp=1.):
         binary = self.binary*self.mask
         unary = self.unary
         if messages is None:
@@ -663,7 +666,7 @@ class Ising(nn.Module):
         for _ in range(num_iters):
             for n in np.random.permutation(range(self.n**2)):
                 # update message from node n to its neighbors
-                messages[n][self.neighbors[n]] = self.lbp_update_node(n, unary, binary, messages)
+                messages[n][self.neighbors[n]] = self.lbp_update_node(n, unary, binary, messages, damp)
                 
         return messages
 
@@ -680,9 +683,9 @@ class Ising(nn.Module):
         for _ in range(num_iters):
             for n in np.random.permutation(range(self.n**2)):
                 # update message from node n to its neighbors
-                new_messages[n][self.neighbors[n]] = self.alphabp_update_node(n, unary, binary, messages)
+                messages[n][self.neighbors[n]] = self.alphabp_update_node(n, unary, binary, messages.detach())
                 
-        return new_messages
+        return messages
 
     def alphabp_marginals(self, messages):
         '''Get the unary and binary marginals from alphabp messages '''
