@@ -33,9 +33,14 @@ parser.add_argument('--lr', default=0.001, type=float)
 parser.add_argument('--agreement_pen', default=10, type=float, help='')
 parser.add_argument('--gpu', default=0, type=int, help='which gpu to use')
 parser.add_argument('--seed', default=3435, type=int, help='random seed')
+parser.add_argument('--optmz_alpha', action='store_true', help='whether to optimize alphas in alpha bp')
+parser.add_argument('--damp', default=0.8, type=float, help='')
 
-def bp_infer(ising, msg_iters, solver, optmz_alpha=False):
+def bp_infer(ising, args, solver):
     '''Do belief propagation with given solver'''
+    msg_iters = args.msg_iters
+    optmz_alpha = args.optmz_alpha
+
     messages = torch.zeros(ising.n**2, ising.n**2, 2).fill_(0.5).cuda()
     unary_marginals_lbp, binary_marginals_lbp = ising.lbp_marginals(messages)
     
@@ -45,6 +50,9 @@ def bp_infer(ising, msg_iters, solver, optmz_alpha=False):
     for i in range(msg_iters):
         if solver is 'lbp':
             messages = ising.lbp_update(1, messages).detach()
+            unary_marginals_lbp_new, binary_marginals_lbp_new = ising.lbp_marginals(messages)
+        elif solver is 'dampbp':
+            messages = ising.lbp_update(1, messages, args.damp).detach()
             unary_marginals_lbp_new, binary_marginals_lbp_new = ising.lbp_marginals(messages)
         elif solver is 'alphabp':
             new_messages = ising.alphabp_update(1, messages)
@@ -233,15 +241,22 @@ def run_marginal_exp(args, seed=3435, verbose=True):
 
     # loopy bp
     if 'bp' in args.method:
-        mrgnl_bp = bp_infer(ising, args.msg_iters, 'lbp')
+        mrgnl_bp = bp_infer(ising, args, 'lbp')
         scores_bp = p_get_scores(test_ub=(mrgnl_bp[1], mrgnl_bp[2]))
         all_scores['bp'] = {'l1': scores_bp[0], 'corr': scores_bp[1]}
         print('Finish {} ...'.format('bp'))
 
+    # damped bp
+    if 'dbp' in args.method:
+        mrgnl_dbp = bp_infer(ising, args, 'dampbp')
+        scores_dbp = p_get_scores(test_ub=(mrgnl_dbp[1], mrgnl_dbp[2]))
+        all_scores['dbp'] = {'l1': scores_dbp[0], 'corr': scores_dbp[1]}
+        print('Finish {} ...'.format('dbp'))
+
 
     # alhpa bp
-    if 'alphabp' in args.method:
-        mrgnl_abp = bp_infer(ising, args.msg_iters, 'alphabp', True)
+    if 'abp' in args.method:
+        mrgnl_abp = bp_infer(ising, args, 'alphabp')
         scores_abp = p_get_scores(test_ub=(mrgnl_abp[1], mrgnl_abp[2]))
         all_scores['abp'] = {'l1': scores_abp[0], 'corr': scores_abp[1]}
         print('Finish {} ...'.format('alpha bp'))
@@ -278,7 +293,7 @@ if __name__ == '__main__':
     # run multiple number of experiments, and collect the stats of performance.
     # args.method = ['mf', 'bp', 'gbp', 'bethe', 'kikuchi']
 
-    args.method = ['mf', 'bp']
+    args.method = ['mf', 'bp', 'dbp', 'abp']
 
     args.device = 'cuda:0'
     
