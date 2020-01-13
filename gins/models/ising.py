@@ -252,7 +252,7 @@ class Ising(nn.Module):
     def __init__(self, n):
         super(Ising, self).__init__()
         self.n = n
-        self.unary = nn.Parameter(torch.randn(n**2))
+        self.unary = nn.Parameter(torch.randn(n**2) )
         self.binary = nn.Parameter(torch.randn(n**2, n**2))
         self.alpha_wgt = nn.Parameter(torch.randn(n**2, n**2) * 0.0 + 0.9)
         self.mask = self.binary_mask(n)
@@ -295,7 +295,9 @@ class Ising(nn.Module):
         # denote the connectivity in the grid of ising model
         mask = torch.zeros(n**2, n**2)
         for i in range(n**2):
-            for j in range(i+1, n **2):                        
+            for j in range(i+1, n **2):
+                # if torch.rand(1) < 0.9:
+                #     mask[i][j] = 1
                 if i + 1 == j and (i+1) % n != 0:
                     mask[i][j] = 1
                 if j - i == n and i < n**2 - 1:
@@ -710,6 +712,10 @@ class Ising(nn.Module):
         else:
             with open(edge_file, 'rb') as f:
                 edge_rate = pickle.load(f)
+
+        if not hasattr(self, "trbp_edge_rate"):
+            self.trbp_edge_rate = edge_rate
+
         # load edge rate
         # else compute it
         if messages is None:
@@ -718,7 +724,8 @@ class Ising(nn.Module):
             for n in np.random.permutation(range(self.n**2)):
                 # update message from node n to its neighbors
                 messages[n][self.neighbors[n]] = self.trbp_update_node(n, unary, binary, messages, edge_rate)
-                
+
+        
         return messages
         
 
@@ -769,6 +776,42 @@ class Ising(nn.Module):
         return unary_marginals, binary_marginals
 
 
+    def trbp_marginals(self, messages):
+        binary = self.binary*self.mask
+        unary = self.unary
+        unary_marginals = []
+        binary_marginals = []
+        for n in range(self.n**2):
+            unary_factor = torch.stack([-unary[n], unary[n]], 0) # 2 
+            for k in self.neighbors[n]:
+                unary_factor = unary_factor + messages[k][n].log() * self.trbp_edge_rate[k, n]
+            unary_prob = F.softmax(unary_factor, dim = 0)
+            unary_marginals.append(unary_prob[1])        
+        unary_marginals = torch.stack(unary_marginals, 0)
+        for (i,j) in self.binary_idx:
+            assert(i < j)
+            binary_factor = binary[i][j]
+            binary_factor = torch.stack([binary_factor, -binary_factor], 0)
+            binary_factor = torch.stack([binary_factor, -binary_factor], 1) # 2 x 2
+            unary_factor_i = torch.stack([-unary[i], unary[i]], 0) # 2 
+            unary_factor_j = torch.stack([-unary[j], unary[j]], 0) # 2 
+            for k in self.neighbors[i]:
+                if k != j:
+                    unary_factor_i += messages[k][i].log() * self.trbp_edge_rate[k,i]
+            for k in self.neighbors[j]:
+                if k != i:
+                    unary_factor_j += messages[k][j].log() * self.trbp_edge_rate[k,i]
+            binary_marginal = unary_factor_i.unsqueeze(1) + \
+                unary_factor_j.unsqueeze(0) + \
+                (messages[i, j].log().unsqueeze(0) + \
+                messages[j, i].log().unsqueeze(1) ) * self.trbp_edge_rate[i, j]
+            
+            binary_marginal = binary_marginal + binary_factor
+            binary_marginal = F.softmax(binary_marginal.view(-1), dim = 0)
+            binary_marginal = binary_marginal.view(2, 2)
+            binary_marginals.append(binary_marginal)
+        return unary_marginals, torch.stack(binary_marginals, 0)
+
     def lbp_marginals(self, messages):
         binary = self.binary*self.mask
         unary = self.unary
@@ -790,10 +833,10 @@ class Ising(nn.Module):
             unary_factor_j = torch.stack([-unary[j], unary[j]], 0) # 2 
             for k in self.neighbors[i]:
                 if k != j:
-                    unary_factor_i += messages[k][i]
+                    unary_factor_i += messages[k][i].log()
             for k in self.neighbors[j]:
                 if k != i:
-                    unary_factor_j += messages[k][j]
+                    unary_factor_j += messages[k][j].log()
             binary_marginal = unary_factor_i.unsqueeze(1) + unary_factor_j.unsqueeze(0)
             binary_marginal = binary_marginal + binary_factor
             binary_marginal = F.softmax(binary_marginal.view(-1), dim = 0)
