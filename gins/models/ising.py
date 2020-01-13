@@ -579,7 +579,7 @@ class Ising(nn.Module):
                     mean_k = mean[k]*2-1
                     message += mean_k*binary_nk
                 message += unary[n]
-                mean[n] = F.sigmoid(2*message)
+                mean[n] = torch.sigmoid(2*message)
         return mean
     
     def mf_binary_marginals(self, unary_marginals):
