@@ -34,7 +34,7 @@ parser.add_argument('--agreement_pen', default=10, type=float, help='')
 parser.add_argument('--gpu', default=0, type=int, help='which gpu to use')
 parser.add_argument('--seed', default=3435, type=int, help='random seed')
 parser.add_argument('--optmz_alpha', action='store_true', help='whether to optimize alphas in alpha bp')
-parser.add_argument('--damp', default=0.8, type=float, help='')
+parser.add_argument('--damp', default=0.9, type=float, help='')
 
 def bp_infer(ising, args, solver):
     '''Do belief propagation with given solver'''
@@ -54,6 +54,9 @@ def bp_infer(ising, args, solver):
         elif solver is 'dampbp':
             messages = ising.lbp_update(1, messages, args.damp).detach()
             unary_marginals_lbp_new, binary_marginals_lbp_new = ising.lbp_marginals(messages)
+        elif solver is "trbp":
+            messages = ising.trbp_update(1, messages, args.damp).detach()
+            unary_marginals_lbp_new, binary_marginals_lbp_new = ising.trbp_marginals(messages)
         elif solver is 'alphabp':
             new_messages = ising.alphabp_update(1, messages)
             unary_marginals_lbp_new, binary_marginals_lbp_new = ising.alphabp_marginals(new_messages)
@@ -294,13 +297,14 @@ if __name__ == '__main__':
     # args.method = ['mf', 'bp', 'gbp', 'bethe', 'kikuchi']
 
     args.method = ['mf', 'bp', 'dbp', 'abp']
+    args.method = ['mf', 'bp','abp']
 
     args.device = 'cuda:0'
     
     results = {key: {'l1':[], 'corr':[]} for key in args.method}
 
     for k in range(args.exp_iters):
-        d = run_marginal_exp(args, k+1)
+        d = run_marginal_exp(args, k+10)
         for key, value in d.items():
             for crt, score in value.items():
                 results[key][crt].append(score)
