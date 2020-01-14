@@ -937,9 +937,9 @@ class Ising(nn.Module):
                     log_Z = log_Z[0]
                     
                 loss += log_Z
-                loss = loss.sum() / loss.size(0)
+                loss = loss.sum() / batch.size(0)
                 loss.backward()
-                train_nll += loss.detach()
+                train_nll += loss.detach() * batch.size(0)
                 optimizer.step()
                 
         return train_nll / dataloader.dataset.len
@@ -948,7 +948,7 @@ class Ising(nn.Module):
         """
         Given the test dataset, compute the nll of test data with inferred log_Z.
         """
-        
+        total_loss = 0
         for i_batch, batch in enumerate(dataloader):
                 loss = - self.log_energy(batch)
                 log_Z = infer_method()
@@ -957,7 +957,9 @@ class Ising(nn.Module):
                 
                 loss += log_Z
 
-        return loss.mean()
+                total_loss += loss.sum()
+
+        return total_loss / dataloader.dataset.len
             
     
 
