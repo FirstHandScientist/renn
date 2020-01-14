@@ -506,6 +506,10 @@ class Ising(nn.Module):
             factors = self.sum_factor(factors, i)
         log_Z = factors[0][-1]
         return log_Z
+    
+    def log_partition_lbp(self):
+        unary_marginals, binary_marginals = ising.marginals()
+
 
     def marginals(self):
         log_Z = self.log_partition_ve()
@@ -914,7 +918,11 @@ class Ising(nn.Module):
             for i_batch, batch in enumerate(dataloader):
                 optimizer.zero_grad()
                 loss = - self.log_energy(batch)
-                loss += infer_method()
+                log_Z = infer_method()
+                if isinstance(log_Z, tuple):
+                    log_Z = log_Z[0]
+                    
+                loss += log_Z
                 loss = loss.sum() / loss.size(0)
                 loss.backward()
                 train_nll += loss.detach()
@@ -929,7 +937,11 @@ class Ising(nn.Module):
         
         for i_batch, batch in enumerate(dataloader):
                 loss = - self.log_energy(batch)
-                loss += infer_method()
+                log_Z = infer_method()
+                if isinstance(log_Z, tuple):
+                    log_Z = log_Z[0]
+                
+                loss += log_Z
 
         return loss.mean()
             

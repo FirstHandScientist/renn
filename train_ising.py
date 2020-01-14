@@ -39,14 +39,13 @@ parser.add_argument('--unary_std', default=1.0, type=float, help='')
 
 parser.add_argument('--graph_type', default='grid', type=str, help='the graph type of ising model')
 parser.add_argument('--data_dir', default='data', type=str, help='dataset dir')
-
 parser.add_argument('--data_regain', action='store_true', help='if to regenerate dataset')
-
 parser.add_argument('--train_size', default=20, type=int, help='the size of training samples')
 parser.add_argument('--valid_size', default=10, type=int, help='the size of valid samples')
 parser.add_argument('--test_size', default=10, type=int, help='the size of testing samples')
 parser.add_argument('--batch_size', default=5, type=int, help='the size of batch samples')
 parser.add_argument('--train_iters', default=5, type=int, help='the number of iterations to train')
+parser.add_argument('--infer', default='ve', type=str, help='the inference method to use')
 
 
 class IsingDataset(Dataset):
@@ -116,8 +115,10 @@ def run_marginal_exp(args, seed=3435, verbose=True):
         ising.degree = ising.degree.cuda()  
 
     # exact computation on ising
-    log_Z = ising.log_partition_ve()
     unary_marginals, binary_marginals = ising.marginals()
+    
+    log_Z = ising.log_partition_ve()
+    
     
     # prepare dataset
     train_data_loader = DataLoader(dataset=args.dataset['train'],
@@ -133,7 +134,14 @@ def run_marginal_exp(args, seed=3435, verbose=True):
     
 
     # training with exact inference (variable elimination)
-    inference_method = ising.log_partition_ve
+    if args.infer == 've':
+        inference_method = ising.log_partition_ve
+    elif args.infer == 'lbp':
+        inference_method = partial(bp_infer, ising=ising, args=args, solver='lbp')
+    else:
+        print("Your assigned inference method is not available.")
+        os.exit(1)
+
     best_nll = float('inf')
     for _ in range(args.train_iters):
         train_avg_nll = ising.trainer(train_data_loader, inference_method, 1, optimizer)
