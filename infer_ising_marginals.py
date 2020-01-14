@@ -125,7 +125,7 @@ if __name__ == '__main__':
     args.method = ['mf', 'bp', 'dbp', 'abp']
     args.method = ['mf', 'bp','bethe', 'kikuchi']
 
-    args.device = 'cuda:0'
+    args.device = 'cpu'
     
     results = {key: {'l1':[], 'corr':[]} for key in args.method}
 

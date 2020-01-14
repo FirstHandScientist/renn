@@ -8,7 +8,7 @@ def bp_infer(ising, args, solver):
     msg_iters = args.msg_iters
     optmz_alpha = args.optmz_alpha
 
-    messages = torch.zeros(ising.n**2, ising.n**2, 2).fill_(0.5).cuda()
+    messages = torch.zeros(ising.n**2, ising.n**2, 2).fill_(0.5).to(ising.device)
     unary_marginals_lbp, binary_marginals_lbp = ising.lbp_marginals(messages)
     
     if optmz_alpha:
@@ -90,7 +90,7 @@ def p2cbp_infer(ising, args):
 def mean_field_infer(ising, args):
     """Run mean field algorithm. """ 
 
-    unary_marginals_mf = torch.zeros(ising.n**2).fill_(0.5).cuda()
+    unary_marginals_mf = torch.zeros(ising.n**2).fill_(0.5).to(ising.device)
     binary_marginals_mf = ising.mf_binary_marginals(unary_marginals_mf)
     
     for i in range(args.msg_iters):
