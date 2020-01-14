@@ -8,6 +8,7 @@ import copy
 import pickle
 import torch
 from torch import cuda
+from collections import deque
 import numpy as np
 import time
 import logging
@@ -40,12 +41,14 @@ parser.add_argument('--unary_std', default=1.0, type=float, help='')
 parser.add_argument('--graph_type', default='grid', type=str, help='the graph type of ising model')
 parser.add_argument('--data_dir', default='data', type=str, help='dataset dir')
 parser.add_argument('--data_regain', action='store_true', help='if to regenerate dataset')
-parser.add_argument('--train_size', default=20, type=int, help='the size of training samples')
-parser.add_argument('--valid_size', default=10, type=int, help='the size of valid samples')
-parser.add_argument('--test_size', default=10, type=int, help='the size of testing samples')
-parser.add_argument('--batch_size', default=5, type=int, help='the size of batch samples')
-parser.add_argument('--train_iters', default=5, type=int, help='the number of iterations to train')
+parser.add_argument('--train_size', default=100, type=int, help='the size of training samples')
+parser.add_argument('--valid_size', default=50, type=int, help='the size of valid samples')
+parser.add_argument('--test_size', default=50, type=int, help='the size of testing samples')
+parser.add_argument('--batch_size', default=100, type=int, help='the size of batch samples')
+parser.add_argument('--train_iters', default=300, type=int, help='the number of iterations to train')
 parser.add_argument('--infer', default='ve', type=str, help='the inference method to use')
+parser.add_argument('--fifo_maxlen', default=4, type=int, help='')
+parser.add_argument('--conv_tol', default=1e-3, type=float, help='')
 
 
 class IsingDataset(Dataset):
@@ -99,7 +102,7 @@ def generate_dataset(args):
 
     
 
-def run_marginal_exp(args, seed=3435, verbose=True):
+def main(args, seed=3435, verbose=True):
     '''compare the marginals produced by mean field, loopy bp, and inference network'''
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -130,7 +133,7 @@ def run_marginal_exp(args, seed=3435, verbose=True):
                                   shuffle=True,
                                   drop_last=False)
     
-    optimizer = torch.optim.Adam(ising.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(ising.parameters(), lr=args.lr * 20)
     
 
     # training with exact inference (variable elimination)
@@ -153,6 +156,7 @@ def run_marginal_exp(args, seed=3435, verbose=True):
 
     best_nll = float('inf')
     avg_time_per_iter = []
+    fifo_loss = deque(maxlen=args.fifo_maxlen)
     for cur_iter in range(args.train_iters):
         time_begin = time.time()
         train_avg_nll = ising.trainer(train_data_loader, inference_method, 1, optimizer)
@@ -162,6 +166,16 @@ def run_marginal_exp(args, seed=3435, verbose=True):
             best_nll = test_avg_nll
         print("Iter: {:5d} | train_avg_nll:{:8.5f} | test_avg_nll: {:8.5f} | best_nll: {:8.5f} | true_nll {:8.5f}, iter_time {:8.5f}".format(cur_iter, train_avg_nll, test_avg_nll, best_nll, args.true_nll['test'], time_end - time_begin))
         avg_time_per_iter.append(time_end - time_begin)
+        fifo_loss.append(train_avg_nll.detach().data)
+        
+        # check if converge
+        if len(fifo_loss) == args.fifo_maxlen:
+            list_loss = list(fifo_loss)
+            diff = torch.FloatTensor([torch.abs(i-j) for i,j in zip(list_loss[:-1], list_loss[1:])])
+            # if the differences between epochs all are smaller than loss_tol
+            # then do not training further
+            if (diff < args.conv_tol).sum() >= diff.size(0):
+                break
 
     avg_time_per_iter = np.array(avg_time_per_iter).mean()
     print("Average time per epoch: {:8.5f}".format(avg_time_per_iter))
@@ -180,20 +194,6 @@ if __name__ == '__main__':
 
     # generate the dataset
     args = generate_dataset(args)
-    
-    results = {key: {'l1':[], 'corr':[]} for key in args.method}
-
-    for k in range(args.exp_iters):
-        d = run_marginal_exp(args, k+10)
-        for key, value in d.items():
-            for crt, score in value.items():
-                results[key][crt].append(score)
-
-    for key, value in results.items():
-        for crt, score in value.items():
-            results[key][crt] = {'mu': np.array(score).mean().round(decimals=6), \
-                                 'std': np.std(np.array(score)).round(decimals=6)}
-
-    print('Average results: \n {}'.format(pd.DataFrame.from_dict(results, orient='index')))
+    d = main(args, np.random.randint(1000))
 
   
