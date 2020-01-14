@@ -143,39 +143,52 @@ def bethe_net_infer(ising, args):
 
     return (log_Z_enc, unary_marginals_enc, binary_marginals_enc)
 
-def kikuchi_net_infer(ising, args):
-    model = ising
-    model.generate_region_graph()
-    encoder = ising_models.GeneralizedInferenceNetwork(args.n, args.state_dim, args.num_layers, mlp_out_dim=2**4)
-    optimizer = torch.optim.Adam(encoder.parameters(), lr=1e-3)
-    unary_marginals_enc = torch.zeros(ising.n ** 2).fill_(0.5)
-    binary_marginals_enc = torch.zeros([len(ising.binary_idx), 2, 2]).fill_(0.25)
+class kikuchi_net_infer(torch.nn.Module):
+    def __init__(self, ising, args):
+        super(kikuchi_net_infer, self).__init__()
+        self.model = ising
+        self.model.generate_region_graph()
+        self.encoder = ising_models.GeneralizedInferenceNetwork(args.n, args.state_dim, args.num_layers, mlp_out_dim=2**4)
+        self.encoder.push2device(self.model.device)
+        self.optimizer = torch.optim.Adam(self.encoder.parameters(), lr=args.lr)
+        self.args = args
 
-    for i in range(args.enc_iters):
-        optimizer.zero_grad()
-        infer_beliefs, consist_error = encoder(model.region_graph)
-        kikuchi_energy = encoder.kikuchi_energy(log_phis=model.log_phis,\
+    def forward(self):
+        unary_marginals_enc = torch.zeros(self.model.n ** 2).fill_(0.5).to(self.model.device)
+        binary_marginals_enc = torch.zeros([len(self.model.binary_idx), 2, 2]).fill_(0.25).to(self.model.device)
+
+        for i in range(self.args.enc_iters):
+            self.optimizer.zero_grad()
+            infer_beliefs, consist_error = self.encoder(self.model.region_graph)
+            kikuchi_energy = self.encoder.kikuchi_energy(log_phis=self.model.log_phis,\
+                                                         infer_beliefs=infer_beliefs, \
+                                                         counts=self.model.region_graph.collect_region_count())
+            loss = kikuchi_energy + self.args.agreement_pen * consist_error
+            loss.backward()
+
+            with torch.no_grad():
+                # print(i,loss)
+                unary_marginals_enc_new, binary_marginals_enc_new =\
+                    self.encoder.read_marginals(binary_idx=self.model.binary_idx,\
                                                 infer_beliefs=infer_beliefs, \
-                                                counts=model.region_graph.collect_region_count())
-        loss = kikuchi_energy + args.agreement_pen * consist_error
-        loss.backward()
+                                                graph=self.model.region_graph)
 
-        with torch.no_grad():
-            # print(i,loss)
-            unary_marginals_enc_new, binary_marginals_enc_new =\
-                encoder.read_marginals(binary_idx=model.binary_idx,\
-                                       infer_beliefs=infer_beliefs, \
-                                       graph=model.region_graph)
+                delta_unary = l2(unary_marginals_enc_new, unary_marginals_enc) 
+                delta_binary = l2(binary_marginals_enc_new[:, 1, 1], binary_marginals_enc[:, 1, 1])
+                delta = delta_unary + delta_binary
+                if delta < self.args.eps:
+                    break
 
-            delta_unary = l2(unary_marginals_enc_new, unary_marginals_enc) 
-            delta_binary = l2(binary_marginals_enc_new[:, 1, 1], binary_marginals_enc[:, 1, 1])
-            delta = delta_unary + delta_binary
-            if delta < args.eps:
-                break
+                unary_marginals_enc = unary_marginals_enc_new.detach()
+                binary_marginals_enc = binary_marginals_enc_new.detach()
 
-            unary_marginals_enc = unary_marginals_enc_new.detach()
-            binary_marginals_enc = binary_marginals_enc_new.detach()
+            self.optimizer.step()
 
-        optimizer.step()
+        # compute the region based energy to estimated partition function
+        infer_beliefs, consist_error = self.encoder(self.model.region_graph)
+        kikuchi_energy = self.encoder.kikuchi_energy(log_phis=self.model.log_phis,\
+                                                     infer_beliefs=infer_beliefs, \
+                                                     counts=self.model.region_graph.collect_region_count())
 
-    return (None, unary_marginals_enc, binary_marginals_enc)
+
+        return (-kikuchi_energy, unary_marginals_enc, binary_marginals_enc)
