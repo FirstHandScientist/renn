@@ -97,7 +97,8 @@ def run_marginal_exp(args, seed=3435, verbose=True):
 
     # Bethe net
     if 'bethe' in args.method:
-        mrgnl_bethe = bethe_net_infer(ising, args)
+        bethe_net = bethe_net_infer(ising, args)
+        mrgnl_bethe = bethe_net()
         scores_bethe = p_get_scores(test_ub=(mrgnl_bethe[1], mrgnl_bethe[2]))
         all_scores['bethe'] = {'l1': scores_bethe[0], 'corr': scores_bethe[1]}
         print('Finish {} ...'.format('bethe'))
