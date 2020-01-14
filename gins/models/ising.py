@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -131,6 +132,7 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
         region_logits = self.mlp(region_features) 
         # region_logits = [h_1, h_2, ... h_n2]
         region_prob = F.softmax(region_logits, dim = 1)
+        
         r0_beliefs = region_prob.view(len(region_idx), 2, 2, 2, 2)
         # cast to R1 and R2
         r1_beliefs, consist_error1= self.marginal_down(r0_beliefs, graph)
@@ -705,7 +707,7 @@ class Ising(nn.Module):
             grid_graph = nx.Graph()
             grid_graph.add_nodes_from([i_node for i_node in range(self.n ** 2)])
             grid_graph.add_edges_from(self.binary_idx)
-            edge_rate = edge_apprear_rate(grid_graph)
+            edge_rate = edge_appear_rate(grid_graph)
             with open(edge_file, 'wb') as f:
                 pickle.dump(edge_rate, f)
             
