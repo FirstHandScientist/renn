@@ -108,7 +108,7 @@ def run_marginal_exp(args, seed=3435, verbose=True):
     
 
     if args.gpu >= 0:
-        ising.push2device('cuda:{}'.format(args.gpu))
+        ising.push2device(args.device)
       
         
         # number of neighbors - 1?
@@ -152,14 +152,19 @@ def run_marginal_exp(args, seed=3435, verbose=True):
         os.exit(1)
 
     best_nll = float('inf')
-    for _ in range(args.train_iters):
+    avg_time_per_iter = []
+    for cur_iter in range(args.train_iters):
+        time_begin = time.time()
         train_avg_nll = ising.trainer(train_data_loader, inference_method, 1, optimizer)
+        time_end = time.time()
         test_avg_nll = ising.test_nll(test_data_loader, inference_method)
         if best_nll > test_avg_nll:
             best_nll = test_avg_nll
-        print("train_avg_nll:{:8.5f} | test_avg_nll: {:8.5f} | best_nll: {:8.5f} | true_nll {:8.5f}".format(train_avg_nll, test_avg_nll, best_nll, args.true_nll['test']))
+        print("Iter: {:5d} | train_avg_nll:{:8.5f} | test_avg_nll: {:8.5f} | best_nll: {:8.5f} | true_nll {:8.5f}, iter_time{:8.5f}".format(cur_iter, train_avg_nll, test_avg_nll, best_nll, args.true_nll['test'], time_end - time_begin))
+        avg_time_per_iter.append(time_end - time_begin)
 
-    
+    avg_time_per_iter = np.array(avg_time_per_iter).mean()
+    print("Average time per epoch: {:8.5f}".format(avg_time_per_iter))
     return best_nll
 
     
@@ -171,7 +176,7 @@ if __name__ == '__main__':
     args.method = ['mf', 'bp', 'dbp', 'abp']
     args.method = ['mf', 'bp','bethe', 'kikuchi']
 
-    args.device = 'cuda:0'
+    args.device = 'cpu'
 
     # generate the dataset
     args = generate_dataset(args)
