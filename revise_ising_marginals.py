@@ -312,8 +312,9 @@ if __name__ == '__main__':
 
     for key, value in results.items():
         for crt, score in value.items():
-            results[key][crt] = np.array(score).mean()
+            results[key][crt] = {'mu': np.array(score).mean().round(decimals=6), \
+                                 'std': np.std(np.array(score)).round(decimals=6)}
 
-    print('Average results: \n {}'.format(pd.DataFrame(results)))
+    print('Average results: \n {}'.format(pd.DataFrame.from_dict(results, orient='index')))
 
   
