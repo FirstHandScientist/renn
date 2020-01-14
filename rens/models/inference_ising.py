@@ -144,6 +144,8 @@ class bethe_net_infer(torch.nn.Module):
             unary_marginals_enc = unary_marginals_enc_new.detach()
             binary_marginals_enc = binary_marginals_enc_new.detach()
 
+        with torch.no_grad():
+            unary_marginals_enc, binary_marginals_enc = self.encoder(self.ising.binary_idx)
         log_Z_enc = -self.ising.bethe_energy(unary_marginals_enc, binary_marginals_enc)  
 
         return (log_Z_enc, unary_marginals_enc, binary_marginals_enc)
@@ -190,7 +192,11 @@ class kikuchi_net_infer(torch.nn.Module):
             self.optimizer.step()
 
         # compute the region based energy to estimated partition function
-        infer_beliefs, consist_error = self.encoder(self.model.region_graph)
+
+        self.optimizer.zero_grad()
+        with torch.no_grad():
+            infer_beliefs, consist_error = self.encoder(self.model.region_graph)
+
         kikuchi_energy = self.encoder.kikuchi_energy(log_phis=self.model.log_phis,\
                                                      infer_beliefs=infer_beliefs, \
                                                      counts=self.model.region_graph.collect_region_count())
