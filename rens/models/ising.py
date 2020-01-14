@@ -466,14 +466,19 @@ class Ising(nn.Module):
         return new_factors
 
     def log_energy(self, x):
-        # x = b x n**2
-        # unary =  n**2
-        # binary =  n**2 x n**2
+        binary = self.binary*self.mask
+        unary = self.unary
+        unary_x = torch.matmul(x, unary.unsqueeze(0).transpose(1,0)) # b x n**2
+        binary_x = torch.matmul(torch.matmul(x, binary) ,x.transpose(1,0)) # b x n**2        
+        return unary_x.squeeze(1) + binary_x.diag()
+    
+    def test_log_energy(self,x):
         binary = self.binary*self.mask
         unary = self.unary
         unary_x = x * unary.unsqueeze(0) # b x n**2
         binary_x = torch.matmul(x, binary)*x # b x n**2        
         return (unary_x + binary_x).sum(1)
+
 
 
     def log_partition_ve(self, order = None):
@@ -899,6 +904,36 @@ class Ising(nn.Module):
             binary_factor_ij = binary_marginal*(binary_marginal.log() - binary_factor_ij)
             bethe += binary_factor_ij.sum()
         return bethe
+
+    def trainer(self, dataloader, infer_method, num_epoch, optimizer):
+        """
+        Do the learning of ising model with given dataset, and inference method.
+        """
+        for _ in range(num_epoch):
+            train_nll = 0
+            for i_batch, batch in enumerate(dataloader):
+                optimizer.zero_grad()
+                loss = - self.log_energy(batch)
+                loss += infer_method()
+                loss = loss.sum() / loss.size(0)
+                loss.backward()
+                train_nll += loss.detach()
+                optimizer.step()
+                
+        return train_nll / dataloader.dataset.len
+    
+    def test_nll(self, dataloader, infer_method):
+        """
+        Given the test dataset, compute the nll of test data with inferred log_Z.
+        """
+        
+        for i_batch, batch in enumerate(dataloader):
+                loss = - self.log_energy(batch)
+                loss += infer_method()
+
+        return loss.mean()
+            
+    
 
 if __name__ == '__main__':
     num_n = 15
