@@ -116,6 +116,11 @@ class TransformerInferenceNetwork(nn.Module):
 
 class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
 
+    def push2device(self, device):
+        self.to(device)
+        self.device = device
+        return self
+        
     def forward(self, graph=None):
         region_idx = graph.region_layers["R0"]
         x = self.node_emb
@@ -213,7 +218,7 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
         r1_nodes = graph.region_layers["R1"]
         idx_map_list = [binary_idx.index(i) for i in r1_nodes]
                 
-        binary_marginals = torch.zeros(len(binary_idx), 2, 2)
+        binary_marginals = torch.zeros(len(binary_idx), 2, 2).to(self.device)
         # feed in the marginals from infer_beliefs
         binary_marginals[idx_map_list] = infer_beliefs["R1"]
         
@@ -241,9 +246,9 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
         for key, beliefs in infer_beliefs.items():
             num_regions = beliefs.size(0)
             beliefs = beliefs.reshape(num_regions, -1)
-            lphi = log_phis[key].reshape(num_regions, -1).type(beliefs.dtype).detach()
+            lphi = log_phis[key].reshape(num_regions, -1).type(beliefs.dtype).detach().to(self.device)
             regions_energy = torch.sum(beliefs * (beliefs.log() - lphi), dim=1)
-            layer_counts = torch.from_numpy(counts[key]).type(beliefs.dtype)
+            layer_counts = torch.from_numpy(counts[key]).type(beliefs.dtype).to(self.device)
             energy += (layer_counts * regions_energy).sum()
 
         return energy
@@ -251,9 +256,10 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
 
 
 class Ising(nn.Module):
-    def __init__(self, n, unary_std):
+    def __init__(self, n, unary_std, device='cpu'):
         super(Ising, self).__init__()
         self.n = n
+        self.device = 'cpu'
         self.unary = nn.Parameter(torch.randn(n**2) * unary_std)
         self.binary = nn.Parameter(torch.randn(n**2, n**2))
         self.alpha_wgt = nn.Parameter(torch.randn(n**2, n**2) * 0.0 + 0.9)
@@ -268,7 +274,15 @@ class Ising(nn.Module):
         self.EPS = 1e-6
         self.region_graph = None
         self._init_disfactor()
-
+        
+    def push2device(self, device):
+        self.to(device)
+        
+        self.degree.to(device)
+        self.mask = self.mask.to(device)        
+        self.device = device
+        return self
+    
     def _init_disfactor(self):
         binary = self.binary*self.mask
         unary = self.unary
