@@ -37,6 +37,11 @@ parser.add_argument('--optmz_alpha', action='store_true', help='whether to optim
 parser.add_argument('--damp', default=0.9, type=float, help='')
 parser.add_argument('--unary_std', default=1.0, type=float, help='')
 
+parser.add_argument('--graph_type', default='grid', type=str, help='the graph type of ising model')
+parser.add_argument('--data_dir', default='data', type=str, help='dataset dir')
+
+parser.add_argument('--data_regain', action='store_true', help='if to regenerate dataset')
+
 parser.add_argument('--train_size', default=20, type=int, help='the size of training samples')
 parser.add_argument('--valid_size', default=10, type=int, help='the size of valid samples')
 parser.add_argument('--test_size', default=10, type=int, help='the size of testing samples')
@@ -64,16 +69,32 @@ def generate_dataset(args):
     Get the training, validate, and testing dataset
     """
     ising = ising_models.Ising(args.n, args.unary_std)
-    train_data = ising.sample(args.train_size)
-    valid_data = ising.sample(args.valid_size)
-    test_data = ising.sample(args.test_size)
+    if not os.path.exists(args.data_dir):
+        os.makedirs(args.data_dir)
+        
+    dataset_dir = os.path.join(args.data_dir, args.graph_type + str(args.n) + '.pkl')
     
-    args.dataset = {'train': IsingDataset(train_data[0], args.device),\
-                    'valid': IsingDataset(valid_data[0], args.device), \
-                    'test': IsingDataset(test_data[0], args.device)}
-    args.true_nll = {'train': - torch.mean(train_data[1]), \
-                     'valid': - torch.mean(valid_data[1]), \
-                     'test': - torch.mean(test_data[1])}
+    if args.data_regain or not os.path.exists(dataset_dir):
+        # generate all required datset
+        train_data = ising.sample(args.train_size)
+        valid_data = ising.sample(args.valid_size)
+        test_data = ising.sample(args.test_size)
+        data_dict = {'train': train_data, 'valid': valid_data, 'test': test_data}
+        with open(dataset_dir, 'wb') as handle:
+            pickle.dump(data_dict, handle)
+        
+    else:
+        # load dataset
+        with open(dataset_dir, 'rb') as handle:
+            data_dict = pickle.load(handle)
+
+    
+    args.dataset = {'train': IsingDataset(data_dict['train'][0], args.device),\
+                    'valid': IsingDataset(data_dict['valid'][0], args.device), \
+                    'test': IsingDataset(data_dict['test'][0], args.device)}
+    args.true_nll = {'train': - torch.mean(data_dict['train'][1]), \
+                     'valid': - torch.mean(data_dict['valid'][1]), \
+                     'test': - torch.mean(data_dict['test'][1])}
     return args
     
 
