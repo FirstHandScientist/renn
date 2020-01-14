@@ -22,7 +22,7 @@ def _findRequirements():
 requirements = _findRequirements()
 setup(
     zip_safe=False,
-    name='gins',
+    name='rens',
     version='0.1.0',
     author_email='doli@kth.se',
     description="Inference tool box",

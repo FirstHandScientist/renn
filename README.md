@@ -6,7 +6,7 @@
 # experiment example
 To compare marginals for a 10x10 Ising model averaged across 5 iterations:
 ```
-python ising_marginals.py --gpu 0 --n 10 --exp_iters 5
+python infer_ising_marginals.py --gpu 0 --n 10 --exp_iters 5
 ```
 
 To train the RBM with amortized BFE, run:

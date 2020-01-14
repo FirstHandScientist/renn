@@ -1,7 +1,7 @@
 import torch
-from gins.models.GBP import parent2child_algo 
-from gins.utils.utils import l2, get_scores, binary2unary_marginals
-from gins.models import ising as ising_models
+from rens.models.GBP import parent2child_algo 
+from rens.utils.utils import l2, get_scores, binary2unary_marginals
+from rens.models import ising as ising_models
 # inference methods ising model
 def bp_infer(ising, args, solver):
     '''Do belief propagation with given solver'''

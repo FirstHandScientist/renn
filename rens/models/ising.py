@@ -9,7 +9,7 @@ import pickle
 import networkx as nx
 from pgmpy.models import RegionGraph
 from pgmpy.factors.discrete import PTDiscreteFactor
-from gins.utils.spanning_tree import edge_appear_rate
+from rens.utils.spanning_tree import edge_appear_rate
 
 def logadd(x, y):
     d = torch.max(x,y)  
