@@ -108,11 +108,11 @@ def run_marginal_exp(args, seed=3435, verbose=True):
     
 
     if args.gpu >= 0:
-        ising.cuda()
+        ising.push2device('cuda:{}'.format(args.gpu))
       
-        ising.mask = ising.mask.cuda()
+        
         # number of neighbors - 1?
-        ising.degree = ising.degree.cuda()  
+        
 
     # exact computation on ising
     unary_marginals, binary_marginals = ising.marginals()
@@ -136,8 +136,17 @@ def run_marginal_exp(args, seed=3435, verbose=True):
     # training with exact inference (variable elimination)
     if args.infer == 've':
         inference_method = ising.log_partition_ve
+    elif args.infer == 'mf':
+        inference_method = partial(mean_field_infer, ising=ising, args=args)
     elif args.infer == 'lbp':
         inference_method = partial(bp_infer, ising=ising, args=args, solver='lbp')
+    elif args.infer == 'dbp':
+        inference_method = partial(bp_infer, ising=ising, args=args, solver='dampbp')
+    elif args.infer == 'bethe':
+        inference_method = partial(bethe_net_infer, ising=ising, args=args)
+    elif args.infer == 'kikuchi':
+        inference_method = kikuchi_net_infer(ising=ising, args=args)
+    
     else:
         print("Your assigned inference method is not available.")
         os.exit(1)
