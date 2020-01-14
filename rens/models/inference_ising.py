@@ -110,38 +110,43 @@ def mean_field_infer(ising, args):
 
     return (log_Z_mf_energy, unary_marginals_mf, binary_marginals_mf)
 
+class bethe_net_infer(torch.nn.Module):
+    def __init__(self, ising, args):
+        # inference network
+        super(bethe_net_infer, self).__init__()
+        self.ising = ising
+        self.device = args.device
+        self.encoder = ising_models.TransformerInferenceNetwork(args.n, args.state_dim, args.num_layers)
+        self.encoder.to(self.device)
+        self.encoder.device = self.device
+        self.optimizer = torch.optim.Adam(self.encoder.parameters(), lr=args.lr)
+        self.args = args
 
-def bethe_net_infer(ising, args):
-    # inference network
-    device = args.device
-    encoder = ising_models.TransformerInferenceNetwork(args.n, args.state_dim, args.num_layers)
-    encoder.to(device)
-    encoder.device = device
-    optimizer = torch.optim.Adam(encoder.parameters(), lr=args.lr)
-    unary_marginals_enc = torch.zeros(ising.n ** 2).fill_(0.5).to(device)
-    binary_marginals_enc = torch.zeros([len(ising.binary_idx), 2, 2]).fill_(0.25).to(device)
-        
-    for i in range(args.enc_iters):
-        optimizer.zero_grad()
-        unary_marginals_enc_new, binary_marginals_enc_new = encoder(ising.binary_idx)
-        bethe_enc = ising.bethe_energy(unary_marginals_enc_new, binary_marginals_enc_new)
-        agreement_loss = encoder.agreement_penalty(ising.binary_idx, unary_marginals_enc_new,
-                                                   binary_marginals_enc_new)
-        (bethe_enc + args.agreement_pen*agreement_loss).backward()
-      
-        optimizer.step()
-        delta_unary = l2(unary_marginals_enc_new, unary_marginals_enc) 
-        delta_binary = l2(binary_marginals_enc_new[:, 1, 1], binary_marginals_enc[:, 1, 1])
-        delta = delta_unary + delta_binary
-        if delta < args.eps:
-            break
-    
-        unary_marginals_enc = unary_marginals_enc_new.detach()
-        binary_marginals_enc = binary_marginals_enc_new.detach()
-      
-    log_Z_enc = -ising.bethe_energy(unary_marginals_enc, binary_marginals_enc)  
+    def forward(self):
+        unary_marginals_enc = torch.zeros(self.ising.n ** 2).fill_(0.5).to(self.device)
+        binary_marginals_enc = torch.zeros([len(self.ising.binary_idx), 2, 2]).fill_(0.25).to(self.device)
 
-    return (log_Z_enc, unary_marginals_enc, binary_marginals_enc)
+        for i in range(self.args.enc_iters):
+            self.optimizer.zero_grad()
+            unary_marginals_enc_new, binary_marginals_enc_new = self.encoder(self.ising.binary_idx)
+            bethe_enc = self.ising.bethe_energy(unary_marginals_enc_new, binary_marginals_enc_new)
+            agreement_loss = self.encoder.agreement_penalty(self.ising.binary_idx, unary_marginals_enc_new,
+                                                       binary_marginals_enc_new)
+            (bethe_enc + self.args.agreement_pen*agreement_loss).backward()
+
+            self.optimizer.step()
+            delta_unary = l2(unary_marginals_enc_new, unary_marginals_enc) 
+            delta_binary = l2(binary_marginals_enc_new[:, 1, 1], binary_marginals_enc[:, 1, 1])
+            delta = delta_unary + delta_binary
+            if delta < self.args.eps:
+                break
+
+            unary_marginals_enc = unary_marginals_enc_new.detach()
+            binary_marginals_enc = binary_marginals_enc_new.detach()
+
+        log_Z_enc = -self.ising.bethe_energy(unary_marginals_enc, binary_marginals_enc)  
+
+        return (log_Z_enc, unary_marginals_enc, binary_marginals_enc)
 
 class kikuchi_net_infer(torch.nn.Module):
     def __init__(self, ising, args):

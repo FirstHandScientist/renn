@@ -143,7 +143,7 @@ def run_marginal_exp(args, seed=3435, verbose=True):
     elif args.infer == 'dbp':
         inference_method = partial(bp_infer, ising=ising, args=args, solver='dampbp')
     elif args.infer == 'bethe':
-        inference_method = partial(bethe_net_infer, ising=ising, args=args)
+        inference_method = bethe_net_infer(ising=ising, args=args)
     elif args.infer == 'kikuchi':
         inference_method = kikuchi_net_infer(ising=ising, args=args)
     
@@ -160,7 +160,7 @@ def run_marginal_exp(args, seed=3435, verbose=True):
         test_avg_nll = ising.test_nll(test_data_loader, inference_method)
         if best_nll > test_avg_nll:
             best_nll = test_avg_nll
-        print("Iter: {:5d} | train_avg_nll:{:8.5f} | test_avg_nll: {:8.5f} | best_nll: {:8.5f} | true_nll {:8.5f}, iter_time{:8.5f}".format(cur_iter, train_avg_nll, test_avg_nll, best_nll, args.true_nll['test'], time_end - time_begin))
+        print("Iter: {:5d} | train_avg_nll:{:8.5f} | test_avg_nll: {:8.5f} | best_nll: {:8.5f} | true_nll {:8.5f}, iter_time {:8.5f}".format(cur_iter, train_avg_nll, test_avg_nll, best_nll, args.true_nll['test'], time_end - time_begin))
         avg_time_per_iter.append(time_end - time_begin)
 
     avg_time_per_iter = np.array(avg_time_per_iter).mean()
