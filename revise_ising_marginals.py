@@ -35,6 +35,7 @@ parser.add_argument('--gpu', default=0, type=int, help='which gpu to use')
 parser.add_argument('--seed', default=3435, type=int, help='random seed')
 parser.add_argument('--optmz_alpha', action='store_true', help='whether to optimize alphas in alpha bp')
 parser.add_argument('--damp', default=0.9, type=float, help='')
+parser.add_argument('--unary_std', default=1.0, type=float, help='')
 
 def bp_infer(ising, args, solver):
     '''Do belief propagation with given solver'''
@@ -220,7 +221,7 @@ def run_marginal_exp(args, seed=3435, verbose=True):
     np.random.seed(seed)
     torch.manual_seed(seed)
     
-    ising = ising_models.Ising(args.n)
+    ising = ising_models.Ising(args.n, args.unary_std)
     
 
     if args.gpu >= 0:
@@ -297,7 +298,7 @@ if __name__ == '__main__':
     # args.method = ['mf', 'bp', 'gbp', 'bethe', 'kikuchi']
 
     args.method = ['mf', 'bp', 'dbp', 'abp']
-    args.method = ['mf', 'bp','abp']
+    args.method = ['mf', 'bp','bethe', 'kikuchi']
 
     args.device = 'cuda:0'
     

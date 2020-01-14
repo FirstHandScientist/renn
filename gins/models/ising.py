@@ -251,10 +251,10 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
 
 
 class Ising(nn.Module):
-    def __init__(self, n):
+    def __init__(self, n, unary_std):
         super(Ising, self).__init__()
         self.n = n
-        self.unary = nn.Parameter(torch.randn(n**2) )
+        self.unary = nn.Parameter(torch.randn(n**2) * unary_std)
         self.binary = nn.Parameter(torch.randn(n**2, n**2))
         self.alpha_wgt = nn.Parameter(torch.randn(n**2, n**2) * 0.0 + 0.9)
         self.mask = self.binary_mask(n)
