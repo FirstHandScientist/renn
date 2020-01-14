@@ -123,7 +123,7 @@ if __name__ == '__main__':
     # args.method = ['mf', 'bp', 'gbp', 'bethe', 'kikuchi']
 
     args.method = ['mf', 'bp', 'dbp', 'abp']
-    args.method = ['mf', 'bp','bethe', 'kikuchi']
+    args.method = ['mf', 'bp','gbp']
 
     args.device = 'cpu'
     

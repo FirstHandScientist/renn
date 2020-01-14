@@ -67,7 +67,7 @@ def p2cbp_infer(ising, args):
     for idx, pair in enumerate(model.binary_idx):
         if pair in gbp.graph.region_layers["R1"]:
             # for already gathered belief in gbp
-            binary_marginals[idx] = gbp.graph.nodes[pair]['belief'].values
+            binary_marginals[idx] = torch.from_numpy(gbp.graph.nodes[pair]['belief'].values)
         else:
             # for belief not gathered in gbp
             pair_belief = 0
@@ -80,7 +80,7 @@ def p2cbp_infer(ising, args):
                 p_belief.normalize(inplace=True)
                 pair_belief += p_belief.values
 
-            binary_marginals[idx] = pair_belief / len(parents_of_pair)
+            binary_marginals[idx] = torch.from_numpy(pair_belief / len(parents_of_pair))
             
     unary_marginals = binary2unary_marginals(model.binary_idx, binary_marginals, model.n)
     

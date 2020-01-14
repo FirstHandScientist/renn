@@ -1,6 +1,10 @@
+
 import torch
 from pgmpy.factors.discrete import PTDiscreteFactor
+from pgmpy.factors.discrete import DiscreteFactor
 import numpy
+import numpy as np
+
 from random import shuffle
 
 class parent2child_algo(object):
@@ -16,7 +20,7 @@ class parent2child_algo(object):
         
         pass
 
-
+    
     def _init_msgs(self):
         """"
         Initialize the message at each directed edges of self.graph
@@ -37,6 +41,31 @@ class parent2child_algo(object):
                                  crdt, \
                                  values.log())
         return self
+    
+    def numpy_factors(self):
+        """
+        Transfer each factor into numpy value based.
+        """
+        for node in self.graph.nodes():
+            self.graph.nodes[node]['log_phi'] = DiscreteFactor(self.graph.nodes[node]['log_phi'].scope(), \
+                                                               self.graph.nodes[node]['log_phi'].cardinality,\
+                                                               np.exp(self.graph.nodes[node]['log_phi'].values.data.numpy()),\
+                                                               self.graph.nodes[node]['log_phi'].state_names)
+            
+        for ie in self.graph.edges():
+            self.graph.edges[ie]['old_msg'] = DiscreteFactor(self.graph.edges[ie]['old_msg'].scope(), \
+                                                               self.graph.edges[ie]['old_msg'].cardinality,\
+                                                               np.exp(self.graph.edges[ie]['old_msg'].values.data.numpy()),\
+                                                               self.graph.edges[ie]['old_msg'].state_names)
+            self.graph.edges[ie]['log_msg'] = DiscreteFactor(self.graph.edges[ie]['log_msg'].scope(), \
+                                                               self.graph.edges[ie]['log_msg'].cardinality,\
+                                                               np.exp(self.graph.edges[ie]['log_msg'].values.data.numpy()),\
+                                                               self.graph.edges[ie]['log_msg'].state_names)
+            self.graph.edges[ie]['PxC'] = DiscreteFactor(self.graph.edges[ie]['PxC'].scope(), \
+                                                               self.graph.edges[ie]['PxC'].cardinality,\
+                                                               np.exp(self.graph.edges[ie]['PxC'].values.data.numpy()),\
+                                                               self.graph.edges[ie]['PxC'].state_names)
+        return self
 
     def check_converge(self):
         """
@@ -44,9 +73,9 @@ class parent2child_algo(object):
         """
         err = 0
         for idx, ie in enumerate(self.graph.edges()):
-            diff = self.graph.edges[ie]['log_msg'].values.exp() - self.graph.edges[ie]['old_msg'].values.exp()
-            err += torch.abs(diff).mean()
-            self.graph.edges[ie]['old_msg'].values = self.graph.edges[ie]['log_msg'].values.clone()
+            diff = self.graph.edges[ie]['log_msg'].values - self.graph.edges[ie]['old_msg'].values
+            err += np.abs(diff).mean()
+            self.graph.edges[ie]['old_msg'].values = self.graph.edges[ie]['log_msg'].values.copy()
         err = err / (idx+1)
         # print(err)
         if err < self.EPS:
@@ -61,13 +90,13 @@ class parent2child_algo(object):
         """
         Propagate beliefs in region graph among regions.
         """
-
+        self.numpy_factors()
         for i in range(self.n_iters):
             # propagate messages
             
             for ie in numpy.random.permutation(range(len(self.graph_edges))):
                 
-                self.update_msg(self.graph_edges[ie])
+                self.numpy_update_msg(self.graph_edges[ie])
             
             
             # print(i)
@@ -83,7 +112,7 @@ class parent2child_algo(object):
         """
         # iter through each node in region graph to create the beliefs
         for node in self.graph.nodes:
-            self.graph.nodes[node]['belief'] = self.gather_node_belief(node)
+            self.graph.nodes[node]['belief'] = self.numpy_gather_node_belief(node)
 
         return
 
@@ -109,6 +138,29 @@ class parent2child_algo(object):
         belief.to_real()
         belief.normalize(inplace=True)
 
+        return belief
+
+    def numpy_gather_node_belief(self, node):
+        """
+        Gather belief for each node in graph from the computed messages.
+        """
+        # accumulate the f_a
+        belief = self.graph.nodes[node]['log_phi'].copy()
+
+        # accumulate msgs from parents
+        for p_node in self.graph.get_parents(node):
+            log_msg = self.graph.edges[(p_node, node)]['log_msg']
+            belief.product(log_msg, inplace=True)
+
+        # accumulate msgs in belief_descendant_set
+        for pair in self.belief_descendant_set(node):
+            p_node, c_node = pair
+            log_msg = self.graph.edges[(p_node, c_node)]['log_msg']
+            belief.product(log_msg, inplace=True)
+
+        assert belief.variables == self.graph.nodes[node]['log_phi'].variables
+        belief.normalize(inplace=True)
+        
         return belief
 
     def belief_descendant_set(self, node):
@@ -189,6 +241,60 @@ class parent2child_algo(object):
         self.graph.edges[edge]['log_msg'].normalize(inplace=True, log_domain=False)
         self.graph.edges[edge]['log_msg'].to_log()
         
+
+        return self
+
+    def numpy_update_msg(self, edge):
+        """
+        Update the message along the input edge.
+        Note these messaages are in real domain.
+        
+        """
+        
+        factor_PxC = self.graph.edges[edge]['PxC'].copy()
+        factor_prod = factor_PxC #self.get_divided_factor(edge)
+        set_N = self.get_set_N(edge)
+        set_D = self.get_set_D(edge)
+
+        
+        accumulate_msg = self.graph.edges[edge]['log_msg'].copy()
+        accumulate_msg.values = numpy.ones(accumulate_msg.values.shape)
+        
+
+        # accumulate the set of N
+        for arc in set_N:
+            # assert  accumulate_msg.var
+            accumulate_msg.product(self.graph.edges[arc]['log_msg'], inplace=True)
+
+        # accumulate the factor A_P\A_R
+        accumulate_msg.product(factor_prod, inplace=True)
+
+        
+        # marginalize set
+        parent, child = edge
+        to_be_marginalize = list(set(parent) - set(child))
+        accumulate_msg.marginalize([str(i) for i in to_be_marginalize], inplace=True)
+        
+        # accumulate the set of D
+        for arc in set_D:
+            accumulate_msg.divide(self.graph.edges[arc]['log_msg'], inplace=True)
+
+
+        # normalization in log domain
+        accumulate_msg.normalize(inplace=True)
+
+        # all msg should be positive
+        # if torch.any(accumulate_msg.values <= 0) != False:
+        #     print('err')
+
+        
+        assert accumulate_msg.variables == self.graph.edges[edge]["log_msg"].variables
+        assert np.isnan(accumulate_msg.values).sum() == 0
+        
+        # update msg
+        self.graph.edges[edge]["log_msg"].sum(accumulate_msg, inplace=True)
+        
+        self.graph.edges[edge]['log_msg'].normalize(inplace=True)
 
         return self
 
