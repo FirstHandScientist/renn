@@ -87,6 +87,16 @@ class parent2child_algo(object):
             self.graph.nodes[node]['belief'] = self.gather_node_belief(node)
 
         return
+    def kikuchi_energy(self):
+        energy = 0
+        graph = self.graph
+        for node in graph.nodes():
+            energy += torch.sum(graph.nodes[node][self.belief_name].values * \
+                       (graph.nodes[node][self.belief_name].values.log() - \
+                        graph.nodes[node]['log_phi'].values.detach())) * \
+                        graph.nodes[node]['weight']
+
+        return graph
 
     def gather_node_belief(self, node):
         """
