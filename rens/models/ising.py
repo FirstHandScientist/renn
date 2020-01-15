@@ -967,10 +967,10 @@ class Ising(nn.Module):
         total_loss = 0
         for i_batch, batch in enumerate(dataloader):
                 loss = - self.log_energy(batch)
-                log_Z = infer_method()
-                if isinstance(log_Z, tuple):
-                    log_Z = log_Z[0]
-                
+                # log_Z = infer_method()
+                # if isinstance(log_Z, tuple):
+                #     log_Z = log_Z[0]
+                log_Z = self.log_partition_ve()
                 loss += log_Z
 
                 total_loss += loss.sum()
