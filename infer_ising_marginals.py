@@ -1,6 +1,7 @@
 import sys
 import os
 import argparse
+from parse import parse
 import json
 import random
 import shutil
@@ -36,6 +37,8 @@ parser.add_argument('--optmz_alpha', action='store_true', help='whether to optim
 parser.add_argument('--damp', default=0.9, type=float, help='')
 parser.add_argument('--unary_std', default=1.0, type=float, help='')
 
+parser.add_argument('--task', default="infer_result_n5_std1.0.txt", type=str, help='the task to carry on.')
+
 
     
 
@@ -45,11 +48,7 @@ def run_marginal_exp(args, seed=3435, verbose=True):
     torch.manual_seed(seed)
     
     ising = ising_models.Ising(args.n, args.unary_std)
-    
-
-    if args.gpu >= 0:
-        ising.push2device(args.device)
-
+    ising.push2device(args.device)
 
     log_Z = ising.log_partition_ve()
     unary_marginals, binary_marginals = ising.marginals()
@@ -57,54 +56,74 @@ def run_marginal_exp(args, seed=3435, verbose=True):
 
     all_scores ={}
     if 'mf' in args.method:
+        time_start = time.time()
         mrgnl_mf = mean_field_infer(ising, args)
         scores_mf = p_get_scores(test_ub=(mrgnl_mf[1], mrgnl_mf[2]))
-        all_scores['mf'] = {'l1': scores_mf[0], 'corr': scores_mf[1]}
+        time_end = time.time()
+        all_scores['mf'] = {'l1': scores_mf[0], 'corr': scores_mf[1], 'time': time_end - time_start}
         print('Finish {} ...'.format('mf'))
 
     # loopy bp
     if 'bp' in args.method:
+        time_start = time.time()
         mrgnl_bp = bp_infer(ising, args, 'lbp')
         scores_bp = p_get_scores(test_ub=(mrgnl_bp[1], mrgnl_bp[2]))
-        all_scores['bp'] = {'l1': scores_bp[0], 'corr': scores_bp[1]}
+        time_end = time.time()
+        all_scores['bp'] = {'l1': scores_bp[0], 'corr': scores_bp[1], 'time': time_end - time_start}
         print('Finish {} ...'.format('bp'))
 
     # damped bp
     if 'dbp' in args.method:
+        time_start = time.time()
         mrgnl_dbp = bp_infer(ising, args, 'dampbp')
         scores_dbp = p_get_scores(test_ub=(mrgnl_dbp[1], mrgnl_dbp[2]))
-        all_scores['dbp'] = {'l1': scores_dbp[0], 'corr': scores_dbp[1]}
+        time_end = time.time()
+        all_scores['dbp'] = {'l1': scores_dbp[0], 'corr': scores_dbp[1], 'time': time_end - time_start}
         print('Finish {} ...'.format('dbp'))
+        time_end = time.time()
+
 
 
     # alhpa bp
     if 'abp' in args.method:
+        time_start = time.time()
         mrgnl_abp = bp_infer(ising, args, 'alphabp')
         scores_abp = p_get_scores(test_ub=(mrgnl_abp[1], mrgnl_abp[2]))
-        all_scores['abp'] = {'l1': scores_abp[0], 'corr': scores_abp[1]}
+        time_end = time.time()
+        all_scores['abp'] = {'l1': scores_abp[0], 'corr': scores_abp[1], 'time': time_end - time_start}
         print('Finish {} ...'.format('alpha bp'))
+        
 
     # Generalized belief propagation
     if 'gbp' in args.method:
+        time_start = time.time()
         mrgnl_gbp = p2cbp_infer(ising, args)
         scores_gbp = p_get_scores(test_ub=(mrgnl_gbp[1].to(unary_marginals), mrgnl_gbp[2].to(unary_marginals)))
-        all_scores['gbp'] = {'l1': scores_gbp[0], 'corr': scores_gbp[1]}
+        time_end = time.time()
+        all_scores['gbp'] = {'l1': scores_gbp[0], 'corr': scores_gbp[1], 'time': time_end - time_start}
         print('Finish {} ...'.format('gbp'))
 
     # Bethe net
     if 'bethe' in args.method:
+        time_start = time.time()
         bethe_net = bethe_net_infer(ising, args)
         mrgnl_bethe = bethe_net()
         scores_bethe = p_get_scores(test_ub=(mrgnl_bethe[1], mrgnl_bethe[2]))
-        all_scores['bethe'] = {'l1': scores_bethe[0], 'corr': scores_bethe[1]}
+        time_end = time.time()
+        all_scores['bethe'] = {'l1': scores_bethe[0], 'corr': scores_bethe[1], 'time': time_end - time_start}
         print('Finish {} ...'.format('bethe'))
+
+
+
 
     # Generalized net
     if 'kikuchi' in args.method:
+        time_start = time.time()
         kikuchi_net = kikuchi_net_infer(ising, args)
         mrgnl_kikuchi = kikuchi_net()
         scores_kikuchi = p_get_scores(test_ub=(mrgnl_kikuchi[1].to(unary_marginals), mrgnl_kikuchi[2].to(unary_marginals)))
-        all_scores['kikuchi'] = {'l1': scores_kikuchi[0], 'corr': scores_kikuchi[1]}
+        time_end = time.time()
+        all_scores['kikuchi'] = {'l1': scores_kikuchi[0], 'corr': scores_kikuchi[1], 'time': time_end - time_start}
         print('Finish {} ...'.format('kikuchi'))
         
 
@@ -117,13 +136,17 @@ if __name__ == '__main__':
     args = parser.parse_args()
     # run multiple number of experiments, and collect the stats of performance.
     # args.method = ['mf', 'bp', 'gbp', 'bethe', 'kikuchi']
-
+    # parsing the task first
+    _, num_node, unary_std = parse("{}_n{}_std{}.txt", args.task)
+    args.n = int(num_node)
+    args.unary_std = float(unary_std)
+    
     args.method = ['mf', 'bp', 'dbp', 'abp']
     args.method = ['mf','gbp', 'kikuchi']
-
+    
 
     
-    results = {key: {'l1':[], 'corr':[]} for key in args.method}
+    results = {key: {'l1':[], 'corr':[], 'time':[]} for key in args.method}
 
     for k in range(args.exp_iters):
         d = run_marginal_exp(args, k+10)
@@ -135,7 +158,13 @@ if __name__ == '__main__':
         for crt, score in value.items():
             results[key][crt] = {'mu': np.array(score).mean().round(decimals=6), \
                                  'std': np.std(np.array(score)).round(decimals=6)}
-
+    
     print('Average results: \n {}'.format(pd.DataFrame.from_dict(results, orient='index')))
+
+    pkl_dir = args.task.replace('txt', 'pkl')
+    with open(pkl_dir, 'wb') as handle:
+        pickle.dump(results, handle)
+
+    sys.exit(0)
 
   

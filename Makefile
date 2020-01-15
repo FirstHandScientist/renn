@@ -3,14 +3,21 @@ PYTHON=pyenv/bin/python
 
 # global variable for directories
 LOG=log
-GRID_N={5,10,15,20}
-UNARY_STD={0.1,1.0}
-RESULTS=result
+GRID_N=4
+UNARY_STD=0.9
+
+EXP=infer_grid
+RESULTS=${EXP}_score
+
+#experiment argument
+DEVICE=cpu
+EXP_ITERS=2
 
 init:
 	mkdir -p ${LOG}
 
-ising: init
-	for std in $(shell echo ${UNARY_STD}); do \
-		for n in $(shell echo ${GRID_N}); do echo "${PYTHON} revise_ising_marginals.py --gpu 0 --n $$n --exp_iters 2 --unary_std $$std > ${LOG}/${RESULTS}_$${n}_$${std}.txt"; done \
-		done
+ising_infer: $(shell echo ${LOG}/${RESULTS}_n${GRID_N}_std${UNARY_STD}.txt)
+
+
+${LOG}/${RESULTS}%.txt: init
+	${PYTHON} infer_ising_marginals.py --device ${DEVICE} --exp_iters ${EXP_ITERS} --task $@ > ${LOG}/$@	
