@@ -159,7 +159,7 @@ class kikuchi_net_infer(torch.nn.Module):
         if self.model.region_graph == None:
             self.model.generate_region_graph()
             
-        self.encoder = ising_models.GeneralizedInferenceNetwork(args.n, args.state_dim, args.num_layers, mlp_out_dim=2**4)
+        self.encoder = ising_models.GeneralizedInferenceNetwork(args.n, args.state_dim, args.num_layers, mlp_out_dim=2**self.model.r0_elmt_size)
         self.encoder.push2device(self.model.device)
         self.optimizer = torch.optim.Adam(self.encoder.parameters(), lr=args.lr)
         self.args = args

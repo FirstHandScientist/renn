@@ -23,6 +23,7 @@ from rens.models.inference_ising import bp_infer, p2cbp_infer, mean_field_infer,
 
 # Model options
 parser = argparse.ArgumentParser()
+parser.add_argument('--structure', default='grid', type=str, help="Graph structure: grid | full_connected")
 parser.add_argument('--n', default=5, type=int, help="ising grid size")
 parser.add_argument('--exp_iters', default=5, type=int, help="how many times to run the experiment")
 parser.add_argument('--msg_iters', default=200, type=int, help="max number of inference steps")
@@ -49,7 +50,7 @@ def run_marginal_exp(args, seed=3435, verbose=True):
     np.random.seed(seed)
     torch.manual_seed(seed)
     
-    ising = ising_models.Ising(args.n, args.unary_std)
+    ising = ising_models.Ising(args.n, args.unary_std, args.device, args.structure)
     ising.push2device(args.device)
 
     log_Z = ising.log_partition_ve()

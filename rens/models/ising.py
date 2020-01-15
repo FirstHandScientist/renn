@@ -142,8 +142,8 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
         region_logits = self.mlp(region_features) 
         # region_logits = [h_1, h_2, ... h_n2]
         region_prob = F.softmax(region_logits, dim = 1)
-        
-        r0_beliefs = region_prob.view(len(region_idx), 2, 2, 2, 2)
+        output_shape = [len(region_idx)] + [2] * graph.r0_elmt_size
+        r0_beliefs = region_prob.view(output_shape)
         consist_error = self.marginal_down(r0_beliefs, graph)
         energy = self.kikuchi_energy(graph)
 
@@ -263,10 +263,11 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
 
 
 class Ising(nn.Module):
-    def __init__(self, n, unary_std, device='cpu'):
+    def __init__(self, n, unary_std, device='cpu', structure='grid'):
         super(Ising, self).__init__()
         self.n = n
-        self.device = 'cpu'
+        self.structure = structure
+        self.device = device
         self.unary = nn.Parameter(torch.randn(n**2) * unary_std)
         self.binary = nn.Parameter(torch.randn(n**2, n**2))
         self.alpha_wgt = nn.Parameter(torch.randn(n**2, n**2) * 0.0 + 0.9)
@@ -325,16 +326,24 @@ class Ising(nn.Module):
     def binary_mask(self, n):
         # binary vector of size n**2 x n**2
         # denote the connectivity in the grid of ising model
-        mask = torch.zeros(n**2, n**2)
-        for i in range(n**2):
-            for j in range(i+1, n **2):
-                # if torch.rand(1) < 0.9:
-                #     mask[i][j] = 1
-                if i + 1 == j and (i+1) % n != 0:
+        if self.structure == 'grid':
+            mask = torch.zeros(n**2, n**2)
+            for i in range(n**2):
+                for j in range(i+1, n **2):
+                    # if torch.rand(1) < 0.9:
+                    #     mask[i][j] = 1
+                    if i + 1 == j and (i+1) % n != 0:
+                        mask[i][j] = 1
+                    if j - i == n and i < n**2 - 1:
+                        mask[i][j] = 1
+            return mask
+        elif self.structure == 'full_connected':
+            mask = torch.zeros(n**2, n**2)
+            for i in range(n**2):
+                for j in range(i+1, n **2):
                     mask[i][j] = 1
-                if j - i == n and i < n**2 - 1:
-                    mask[i][j] = 1
-        return mask
+                    
+            return mask
 
 
     def generate_region_graph(self, step=1):
@@ -343,7 +352,8 @@ class Ising(nn.Module):
         clusters = self._get_R0(step)
         graph.add_nodes_from(clusters)
         graph.cluster_variation()
-        
+        self.r0_elmt_size = len(graph.region_layers['R0'][0])
+        graph.r0_elmt_size = len(graph.region_layers['R0'][0])
         # calculate the factor for each region and attach to graph
         self.attach_region_factors(graph)
         self.attach_edge_factors(graph)
@@ -407,7 +417,7 @@ class Ising(nn.Module):
             region_sum.sum(self.log_binary_factors[node], inplace=True)
             return region_sum
         
-        elif len(node) == 4:
+        elif len(node) >= 3:
             for i in node:
                 region_sum.sum(self.log_unary_factors[(i,)], inplace=True)
 
@@ -428,19 +438,25 @@ class Ising(nn.Module):
         """
         regions = []
         n = self.n
-        i, j = 0,0
-        while i>=0 and i< n - step:
-            j = 0
-            while j>=0 and j< n - step:
-                cornor = i * n + j
-                candidate = [cornor + col + row * n for row in range(step+1) for col in range(step+1)]
-                regions.append(tuple(candidate))
-                j += step
-                
-            i += step
+        if self.structure == 'grid':
+            i, j = 0,0
+            while i>=0 and i< n - step:
+                j = 0
+                while j>=0 and j< n - step:
+                    cornor = i * n + j
+                    candidate = [cornor + col + row * n for row in range(step+1) for col in range(step+1)]
+                    regions.append(tuple(candidate))
+                    j += step
 
-        return regions
-    
+                i += step
+
+            return regions
+        elif self.structure == 'full_connected':
+            region = set()
+            for comb in itertools.combinations(range(n**2), 3):
+                region.add(tuple(sorted(list(comb))))
+            return region
+
     
     
     def broadcast_sum(self, indices, reduce_idx, factors):
