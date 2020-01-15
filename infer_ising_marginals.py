@@ -55,6 +55,7 @@ def run_marginal_exp(args, seed=3435, verbose=True):
     log_Z = ising.log_partition_ve()
     unary_marginals, binary_marginals = ising.marginals()
     p_get_scores = partial(get_scores, true_ub=(unary_marginals, binary_marginals))
+    ising.generate_region_graph()
 
     all_scores ={}
     if 'mf' in args.method:
