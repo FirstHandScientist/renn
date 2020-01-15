@@ -91,12 +91,12 @@ class parent2child_algo(object):
         energy = 0
         graph = self.graph
         for node in graph.nodes():
-            energy += torch.sum(graph.nodes[node][self.belief_name].values * \
-                       (graph.nodes[node][self.belief_name].values.log() - \
+            energy += torch.sum(graph.nodes[node]['belief'].values * \
+                       (graph.nodes[node]['belief'].values.log() - \
                         graph.nodes[node]['log_phi'].values.detach())) * \
                         graph.nodes[node]['weight']
 
-        return graph
+        return energy
 
     def gather_node_belief(self, node):
         """

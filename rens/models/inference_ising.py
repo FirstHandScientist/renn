@@ -64,6 +64,7 @@ def p2cbp_infer(ising, args):
     gbp = parent2child_algo(graph=model.region_graph, n_iters=args.msg_iters)
     gbp.inference()
     gbp.read_beliefs()
+    kukuchi_energy = gbp.kikuchi_energy()
     binary_marginals = torch.FloatTensor(len(model.binary_idx), 2, 2)
     for idx, pair in enumerate(model.binary_idx):
         if pair in gbp.graph.region_layers["R1"]:
@@ -85,7 +86,7 @@ def p2cbp_infer(ising, args):
             
     unary_marginals = binary2unary_marginals(model.binary_idx, binary_marginals, model.n)
     
-    return (None, unary_marginals, binary_marginals)
+    return (-kukuchi_energy, unary_marginals, binary_marginals)
 
 
 def mean_field_infer(ising, args):
