@@ -12,6 +12,7 @@ from torch import cuda
 import numpy as np
 import time
 import logging
+from tabulate import tabulate
 import pandas as pd
 from torch.nn.init import xavier_uniform_
 from functools import partial
@@ -159,7 +160,9 @@ if __name__ == '__main__':
             results[key][crt] = {'mu': np.array(score).mean().round(decimals=6), \
                                  'std': np.std(np.array(score)).round(decimals=6)}
     
-    print('Average results: \n {}'.format(pd.DataFrame.from_dict(results, orient='index')))
+    print('Average results: \n')
+    with pd.option_context('display.max_rows', None, 'display.max_columns', 1000):
+        print(pd.DataFrame.from_dict(results, orient='index'))
 
     pkl_dir = args.task.replace('txt', 'pkl')
     with open(pkl_dir, 'wb') as handle:

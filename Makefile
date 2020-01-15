@@ -20,4 +20,4 @@ ising_infer: $(shell echo ${LOG}/${RESULTS}_n${GRID_N}_std${UNARY_STD}.txt)
 
 
 ${LOG}/${RESULTS}%.txt: init
-	${PYTHON} infer_ising_marginals.py --device ${DEVICE} --exp_iters ${EXP_ITERS} --task $@ > ${LOG}/$@	
+	${PYTHON} infer_ising_marginals.py --device ${DEVICE} --exp_iters ${EXP_ITERS} --task $@ > $@	
