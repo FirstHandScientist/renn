@@ -35,7 +35,7 @@ parser.add_argument('--agreement_pen', default=10, type=float, help='')
 parser.add_argument('--gpu', default=0, type=int, help='which gpu to use')
 parser.add_argument('--seed', default=3435, type=int, help='random seed')
 parser.add_argument('--optmz_alpha', action='store_true', help='whether to optimize alphas in alpha bp')
-parser.add_argument('--damp', default=0.9, type=float, help='')
+parser.add_argument('--damp', default=0.5, type=float, help='')
 parser.add_argument('--unary_std', default=1.0, type=float, help='')
 
 parser.add_argument('--graph_type', default='grid', type=str, help='the graph type of ising model')
@@ -110,8 +110,8 @@ def main(args, seed=3435, verbose=True):
     ising = ising_models.Ising(args.n, args.unary_std)
     
 
-    if args.gpu >= 0:
-        ising.push2device(args.device)
+    
+    ising.push2device(args.device)
       
         
         # number of neighbors - 1?
@@ -133,7 +133,7 @@ def main(args, seed=3435, verbose=True):
                                   shuffle=True,
                                   drop_last=False)
     
-    optimizer = torch.optim.Adam(ising.parameters(), lr=args.lr * 20)
+    optimizer = torch.optim.Adam([ising.unary, ising.binary], lr=args.lr * 20)
     
 
     # training with exact inference (variable elimination)
@@ -185,10 +185,6 @@ def main(args, seed=3435, verbose=True):
 if __name__ == '__main__':
     args = parser.parse_args()
     # run multiple number of experiments, and collect the stats of performance.
-    # args.method = ['mf', 'bp', 'gbp', 'bethe', 'kikuchi']
-
-    args.method = ['mf', 'bp', 'dbp', 'abp']
-    args.method = ['mf', 'bp','bethe', 'kikuchi']
 
     args.device = 'cpu'
 
