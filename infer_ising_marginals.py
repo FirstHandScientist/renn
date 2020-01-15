@@ -30,7 +30,7 @@ parser.add_argument('--num_layers', default=1, type=int)
 parser.add_argument('--state_dim', default=200, type=int)
 parser.add_argument('--lr', default=0.001, type=float)
 parser.add_argument('--agreement_pen', default=10, type=float, help='')
-parser.add_argument('--gpu', default=0, type=int, help='which gpu to use')
+parser.add_argument('--device', default='cpu', type=str, help='which gpu to use')
 parser.add_argument('--seed', default=3435, type=int, help='random seed')
 parser.add_argument('--optmz_alpha', action='store_true', help='whether to optimize alphas in alpha bp')
 parser.add_argument('--damp', default=0.9, type=float, help='')
@@ -121,7 +121,7 @@ if __name__ == '__main__':
     args.method = ['mf', 'bp', 'dbp', 'abp']
     args.method = ['mf','gbp', 'kikuchi']
 
-    args.device = 'cuda:1'
+
     
     results = {key: {'l1':[], 'corr':[]} for key in args.method}
 
