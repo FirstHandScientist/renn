@@ -12,7 +12,7 @@ from torch import cuda
 import numpy as np
 import time
 import logging
-from tabulate import tabulate
+
 import pandas as pd
 from torch.nn.init import xavier_uniform_
 from functools import partial
