@@ -63,7 +63,9 @@ def run_marginal_exp(args, seed=3435, verbose=True):
         mrgnl_mf = mean_field_infer(ising, args)
         scores_mf = p_get_scores(test_ub=(mrgnl_mf[1], mrgnl_mf[2]))
         time_end = time.time()
-        all_scores['mf'] = {'l1': scores_mf[0], 'corr': scores_mf[1], 'time': time_end - time_start}
+        all_scores['mf'] = {'l1': scores_mf[0], 'corr': scores_mf[1],\
+                            'time': time_end - time_start,\
+                            'logz_err': torch.abs(log_Z - mrgnl_mf[0]).to('cpu').numpy()}
         print('Finish {} ...'.format('mf'))
 
     # loopy bp
@@ -72,7 +74,9 @@ def run_marginal_exp(args, seed=3435, verbose=True):
         mrgnl_bp = bp_infer(ising, args, 'lbp')
         scores_bp = p_get_scores(test_ub=(mrgnl_bp[1], mrgnl_bp[2]))
         time_end = time.time()
-        all_scores['bp'] = {'l1': scores_bp[0], 'corr': scores_bp[1], 'time': time_end - time_start}
+        all_scores['bp'] = {'l1': scores_bp[0], 'corr': scores_bp[1],\
+                            'time': time_end - time_start,\
+                            'logz_err': torch.abs(log_Z - mrgnl_bp[0]).to('cpu').numpy()}
         print('Finish {} ...'.format('bp'))
 
     # damped bp
@@ -81,7 +85,9 @@ def run_marginal_exp(args, seed=3435, verbose=True):
         mrgnl_dbp = bp_infer(ising, args, 'dampbp')
         scores_dbp = p_get_scores(test_ub=(mrgnl_dbp[1], mrgnl_dbp[2]))
         time_end = time.time()
-        all_scores['dbp'] = {'l1': scores_dbp[0], 'corr': scores_dbp[1], 'time': time_end - time_start}
+        all_scores['dbp'] = {'l1': scores_dbp[0], 'corr': scores_dbp[1], \
+                             'time': time_end - time_start, \
+                             'logz_err': torch.abs(log_Z - mrgnl_dbp[0]).to('cpu').numpy()}
         print('Finish {} ...'.format('dbp'))
         time_end = time.time()
 
@@ -103,7 +109,9 @@ def run_marginal_exp(args, seed=3435, verbose=True):
         mrgnl_gbp = p2cbp_infer(ising, args)
         scores_gbp = p_get_scores(test_ub=(mrgnl_gbp[1].to(unary_marginals), mrgnl_gbp[2].to(unary_marginals)))
         time_end = time.time()
-        all_scores['gbp'] = {'l1': scores_gbp[0], 'corr': scores_gbp[1], 'time': time_end - time_start}
+        all_scores['gbp'] = {'l1': scores_gbp[0], 'corr': scores_gbp[1], \
+                             'time': time_end - time_start, \
+                             'logz_err': torch.abs(log_Z - mrgnl_gbp[0]).to('cpu').numpy()}
         print('Finish {} ...'.format('gbp'))
 
     # Bethe net
@@ -113,7 +121,9 @@ def run_marginal_exp(args, seed=3435, verbose=True):
         mrgnl_bethe = bethe_net()
         scores_bethe = p_get_scores(test_ub=(mrgnl_bethe[1], mrgnl_bethe[2]))
         time_end = time.time()
-        all_scores['bethe'] = {'l1': scores_bethe[0], 'corr': scores_bethe[1], 'time': time_end - time_start}
+        all_scores['bethe'] = {'l1': scores_bethe[0], 'corr': scores_bethe[1], \
+                               'time': time_end - time_start, \
+                               'logz_err': torch.abs(log_Z - mrgnl_bethe[0]).to('cpu').numpy()}
         print('Finish {} ...'.format('bethe'))
 
 
@@ -126,7 +136,9 @@ def run_marginal_exp(args, seed=3435, verbose=True):
         mrgnl_kikuchi = kikuchi_net()
         scores_kikuchi = p_get_scores(test_ub=(mrgnl_kikuchi[1].to(unary_marginals), mrgnl_kikuchi[2].to(unary_marginals)))
         time_end = time.time()
-        all_scores['kikuchi'] = {'l1': scores_kikuchi[0], 'corr': scores_kikuchi[1], 'time': time_end - time_start}
+        all_scores['kikuchi'] = {'l1': scores_kikuchi[0], 'corr': scores_kikuchi[1],\
+                                 'time': time_end - time_start, \
+                                 'logz_err': torch.abs(log_Z - mrgnl_kikuchi[0]).to('cpu').numpy()}
         print('Finish {} ...'.format('kikuchi'))
         
 
