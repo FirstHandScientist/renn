@@ -285,9 +285,15 @@ class Ising(nn.Module):
     def push2device(self, device):
         self.to(device)
         
-        self.degree.to(device)
+        self.degree = self.degree.to(device)
         self.mask = self.mask.to(device)        
         self.device = device
+
+        for key, value in self.log_binary_factors.items():
+            value.to(self.device)
+        for key, value in self.log_unary_factors.items():
+            value.to(self.device)
+        
         return self
     
     def _init_disfactor(self):
@@ -298,7 +304,9 @@ class Ising(nn.Module):
         # bethe free energy computation of unary part
         self.log_unary_factors = {}
         for i in range(len(unary)):
-            self.log_unary_factors[(i,)] = PTDiscreteFactor([str(i)], [2], torch.stack([unary0[i], unary1[i]], 0))
+            u_factor = torch.stack([unary0[i], unary1[i]], 0)
+            u_factor = u_factor.to(self.device)
+            self.log_unary_factors[(i,)] = PTDiscreteFactor([str(i)], [2], u_factor)
         
         
         
@@ -307,6 +315,7 @@ class Ising(nn.Module):
             binary_factor = binary[i][j] # J_ij
             binary_factor = torch.stack([binary_factor, -binary_factor], 0)
             binary_factor = torch.stack([binary_factor, -binary_factor], 1) # 2 x 2
+            binary_factor = binary_factor.to(self.device)
             d_binary_factor = PTDiscreteFactor([str(i), str(j)], [2,2], binary_factor)
             self.log_binary_factors[(i,j)] = d_binary_factor
             self.log_binary_factors[(j,i)] = d_binary_factor
@@ -386,7 +395,7 @@ class Ising(nn.Module):
         """
         region_sum = PTDiscreteFactor(tuple([str(i) for i in node]), \
                                     [2] * len(node), \
-                                    torch.zeros(2 ** len(node)))
+                                      torch.zeros(2 ** len(node)).to(self.device))
         if len(node) ==1:
             region_sum.sum(self.log_unary_factors[node], inplace=True)
             return region_sum

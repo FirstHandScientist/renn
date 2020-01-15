@@ -25,17 +25,18 @@ class parent2child_algo(object):
         for ie in self.graph.edges():
             child = ie[-1]
             crdt = self.graph.nodes[child]['log_phi'].cardinality
-            values = torch.randn(self.graph.nodes[child]['log_phi'].values.size()).abs() 
+            device = self.graph.nodes[child]['log_phi'].values.device
+            values = torch.randn(self.graph.nodes[child]['log_phi'].values.size()).abs().to(device)
             values = values / values.sum()
             self.graph.edges[ie]['log_msg'] = \
                 self._new_factor([str(i) for i in child], \
                                  crdt, \
-                                 values.log())
+                                 values.detach().log())
             # 'old_msg' is used to monitor the convergence of algorithm
             self.graph.edges[ie]['old_msg'] = \
                 self._new_factor([str(i) for i in child], \
                                  crdt, \
-                                 values.log())
+                                 values.detach().log())
         return self
 
     def check_converge(self):
