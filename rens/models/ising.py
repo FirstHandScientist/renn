@@ -10,6 +10,8 @@ import networkx as nx
 from pgmpy.models import RegionGraph
 from pgmpy.factors.discrete import PTDiscreteFactor
 from rens.utils.spanning_tree import edge_appear_rate
+from rens.utils.utils import get_binary_marginals_of_region_graph
+from rens.utils.utils import binary2unary_marginals
 
 def logadd(x, y):
     d = torch.max(x,y)  
@@ -122,6 +124,9 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
         return self
         
     def forward(self, graph=None):
+        # the key str used for store belief
+        if not hasattr(self, 'belief_name'):
+            self.belief_name = 'net_belief'
         region_idx = graph.region_layers["R0"]
         x = self.node_emb
         for l in range(self.num_layers):
@@ -139,34 +144,65 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
         region_prob = F.softmax(region_logits, dim = 1)
         
         r0_beliefs = region_prob.view(len(region_idx), 2, 2, 2, 2)
-        # cast to R1 and R2
-        r1_beliefs, consist_error1= self.marginal_down(r0_beliefs, graph)
-        r2_beliefs, consist_error2= self.marginal_down(r1_beliefs, graph)
-        infered_beliefs = {"R0": r0_beliefs, "R1": r1_beliefs, "R2": r2_beliefs}
-        
-        return infered_beliefs, consist_error1 + consist_error2
+        consist_error = self.marginal_down(r0_beliefs, graph)
+        energy = self.kikuchi_energy(graph)
+
+        return energy, consist_error
+
+    def kikuchi_energy(self, graph):
+        """Compute the Kikuchi free energy"""
+        energy = 0
+        for node in graph.nodes():
+            energy += torch.sum(graph.nodes[node][self.belief_name].values * \
+                       (graph.nodes[node][self.belief_name].values.log() - \
+                        graph.nodes[node]['log_phi'].values.detach())) * \
+                        graph.nodes[node]['weight']
+
+        return energy
+ 
+    def attach_r0_belief(self, r0_beliefs, graph):
+        for idx, node in enumerate(graph.region_layers['R0']):
+            graph.nodes[node][self.belief_name] = PTDiscreteFactor([str(i) for i in node], [2] * len(node), r0_beliefs[idx])
+        return graph
+
 
     
-    def marginal_down(self, r_beliefs, graph):
+    def marginal_down(self, r0_beliefs, graph):
         """
         Given the beliefs in a layer, R0 or R1, cast to the marginals in children layer.
         
         """
-        if r_beliefs.dim() - 1 == 4:
-            # input is in R0
-            r1_beliefs, mismatch = self.belief_mismatch_regions_below(cast_job="R0R1", graph=graph, p_beliefs=r_beliefs)
+        self.attach_r0_belief(r0_beliefs, graph)
+        region_names = sorted(list(graph.region_layers.keys()))
+        region_names.pop(0)
+        mismatch = 0
+        for the_layer in region_names:
+            for node in graph.region_layers[the_layer]:
+                parents = graph.get_parents(node)
+                to_marginal_scope = [list(set(p_node) - set(node)) for p_node in parents]
+ 
+                all_mgnl2child = [graph.nodes[p_node][self.belief_name].marginalize([str(i) for i in to_marginal_scope[idx]], inplace=False) for idx, p_node in enumerate(parents)]
+                all_mgnl2child_belief = torch.stack([factor.values for factor in all_mgnl2child],0)
+                node_belief = all_mgnl2child_belief.mean(0)
+                graph.nodes[node][self.belief_name] = PTDiscreteFactor([str(i) for i in node], [2]*len(node), node_belief)
+                mismatch += torch.sum((all_mgnl2child_belief - node_belief ) ** 2)
 
-            return r1_beliefs, mismatch
+        return mismatch
+    
+    def read_marginals(self, binary_idx, num_nodes, graph):
+        """
+        Read out all the unary and binary marginals from optimized network.
 
-        
-        elif r_beliefs.dim() - 1 == 2:
-            # input is in R1
-            r2_beliefs, mismatch = self.belief_mismatch_regions_below(cast_job="R1R2", graph=graph, p_beliefs=r_beliefs)
-
-            return r2_beliefs, mismatch
-
-
-    def belief_mismatch_regions_below(self, cast_job, graph, p_beliefs):
+        """
+        # 1. read binary marginals from infer_beliefs first and put at corresponding position in
+        # binary_marginals
+        binary_marginals = get_binary_marginals_of_region_graph(graph, binary_idx, self.belief_name)
+        unary_marginals = binary2unary_marginals(binary_idx, binary_marginals, num_nodes)
+    
+        return unary_marginals, binary_marginals
+ 
+    #################################################
+    def _belief_mismatch_regions_below(self, cast_job, graph, p_beliefs):
         
         parent_layer=graph.region_layers[cast_job[:2]]
         child_layer=graph.region_layers[cast_job[2:]]
@@ -187,7 +223,7 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
 
         
 
-    def mgnl2child(self, parents, child, parent_beliefs):
+    def _mgnl2child(self, parents, child, parent_beliefs):
         """
         Calculation of cast marginals of parents to child nodes.
         Parameters
@@ -208,39 +244,10 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
 
         return torch.stack(child_beliefs)
 
-    def read_marginals(self, binary_idx, infer_beliefs, graph):
-        """
-        Read out all the unary and binary marginals from optimized network.
-
-        """
-        # 1. read binary marginals from infer_beliefs first and put at corresponding position in
-        # binary_marginals
-        r1_nodes = graph.region_layers["R1"]
-        idx_map_list = [binary_idx.index(i) for i in r1_nodes]
-                
-        binary_marginals = torch.zeros(len(binary_idx), 2, 2).to(self.device)
-        # feed in the marginals from infer_beliefs
-        binary_marginals[idx_map_list] = infer_beliefs["R1"]
-        
-        # find the rest binary marginals
-        idx_diff = set(binary_idx).difference(set(r1_nodes))
-        for idx in idx_diff:
-            p_nodes = [i for i in graph.region_layers["R0"] if graph._is_subset(idx, i)]
-            p_beliefs_idx = [graph.region_layers["R0"].index(i) for i in p_nodes]
-            p_nodes_beliefs = infer_beliefs["R0"][p_beliefs_idx]
-            binary_marginals[binary_idx.index(idx)] = self.mgnl2child(p_nodes, idx, p_nodes_beliefs)
-
-        # compute the unary
-        unary_marginals_all = [[] for _ in range(self.n**2)]
-        for k, (i,j) in enumerate(binary_idx):            
-            binary_marginal = binary_marginals[k]
-            unary_marginals_all[i].append(binary_marginal.sum(1))
-            unary_marginals_all[j].append(binary_marginal.sum(0))            
-        unary_marginals = [torch.stack(unary, 0).mean(0)[1] for unary in unary_marginals_all]
-        return torch.stack(unary_marginals), binary_marginals
+ 
 
 
-    def kikuchi_energy(self, log_phis, infer_beliefs, counts):
+    def _kikuchi_energy(self, log_phis, infer_beliefs, counts):
         """Compute the Kikuchi free energy"""
         energy = 0
         for key, beliefs in infer_beliefs.items():

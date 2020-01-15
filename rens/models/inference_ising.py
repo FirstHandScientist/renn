@@ -166,10 +166,8 @@ class kikuchi_net_infer(torch.nn.Module):
 
         for i in range(self.args.enc_iters):
             self.optimizer.zero_grad()
-            infer_beliefs, consist_error = self.encoder(self.model.region_graph)
-            kikuchi_energy = self.encoder.kikuchi_energy(log_phis=self.model.log_phis,\
-                                                         infer_beliefs=infer_beliefs, \
-                                                         counts=self.model.region_graph.collect_region_count())
+            kikuchi_energy, consist_error = self.encoder(self.model.region_graph)
+            
             loss = kikuchi_energy + self.args.agreement_pen * consist_error
             loss.backward()
 
@@ -177,7 +175,7 @@ class kikuchi_net_infer(torch.nn.Module):
                 # print(i,loss)
                 unary_marginals_enc_new, binary_marginals_enc_new =\
                     self.encoder.read_marginals(binary_idx=self.model.binary_idx,\
-                                                infer_beliefs=infer_beliefs, \
+                                                num_nodes=self.model.n, \
                                                 graph=self.model.region_graph)
 
                 delta_unary = l2(unary_marginals_enc_new, unary_marginals_enc) 
@@ -193,13 +191,7 @@ class kikuchi_net_infer(torch.nn.Module):
 
         # compute the region based energy to estimated partition function
 
-        self.optimizer.zero_grad()
-        with torch.no_grad():
-            infer_beliefs, consist_error = self.encoder(self.model.region_graph)
-
-        kikuchi_energy = self.encoder.kikuchi_energy(log_phis=self.model.log_phis,\
-                                                     infer_beliefs=infer_beliefs, \
-                                                     counts=self.model.region_graph.collect_region_count())
+        kikuchi_energy, consist_error = self.encoder(self.model.region_graph)
 
 
         return (-kikuchi_energy, unary_marginals_enc, binary_marginals_enc)

@@ -48,11 +48,7 @@ def run_marginal_exp(args, seed=3435, verbose=True):
     
 
     if args.gpu >= 0:
-        ising.cuda()
-      
-        ising.mask = ising.mask.cuda()
-        # number of neighbors - 1?
-        ising.degree = ising.degree.cuda()  
+        ising.push2device(args.device)
 
 
     log_Z = ising.log_partition_ve()
@@ -123,7 +119,7 @@ if __name__ == '__main__':
     # args.method = ['mf', 'bp', 'gbp', 'bethe', 'kikuchi']
 
     args.method = ['mf', 'bp', 'dbp', 'abp']
-    args.method = ['mf', 'bp','bethe', 'kikuchi']
+    args.method = ['mf', 'bp','bethe', 'gbp', 'kikuchi']
 
     args.device = 'cpu'
     

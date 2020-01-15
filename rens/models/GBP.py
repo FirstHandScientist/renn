@@ -74,7 +74,7 @@ class parent2child_algo(object):
             if self.check_converge():
                 break
 
-        print(i)
+        
         return self
 
     def read_beliefs(self):

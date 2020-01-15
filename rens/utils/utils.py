@@ -58,7 +58,7 @@ def get_binary_layer_of_region_graph(graph):
         if len(layer[0]) == 2 :
             return (key, layer)
 
-def get_binary_marginals_of_region_graph(graph, binary_regions):
+def get_binary_marginals_of_region_graph(graph, binary_regions, key='belief'):
     """
     Compute the binary marginals of region graph.
     binary_regions: list of regions (with two nodes) for which to compute marginals.
@@ -70,19 +70,19 @@ def get_binary_marginals_of_region_graph(graph, binary_regions):
     for idx, pair in enumerate(binary_regions):
         if pair in binary_region_layer:
             # for already gathered belief in gbp
-            binary_marginals.append(graph.nodes[pair]['belief'].values)
+            binary_marginals.append(graph.nodes[pair][key].values)
         else:
             # for belief not gathered in gbp
             pair_belief = 0
             parents_of_pair = graph.get_supernode_of(pair)
             for p_node in parents_of_pair:
                 to_marginal_idx = tuple(sorted(set(p_node) - set(pair)))
-                p_belief = graph.nodes[p_node]['belief'].copy()
+                p_belief = graph.nodes[p_node][key].copy()
                 p_belief.marginalize([str(i) for i in to_marginal_idx], inplace=True)
                 p_belief.normalize(inplace=True)
                 pair_belief += p_belief.values
 
-            print('here')
+            
             binary_marginals.append( pair_belief / len(parents_of_pair))
 
     return torch.stack(binary_marginals, 0)
