@@ -3,15 +3,15 @@ PYTHON=pyenv/bin/python
 
 # global variable for directories
 LOG=log
-GRID_N=4
-UNARY_STD=0.9
+GRID_N={5,10,15,20,30}
+UNARY_STD={0.1,1.0}
 
 EXP=infer_grid
 RESULTS=${EXP}_score
 
 #experiment argument
-DEVICE=cpu
-EXP_ITERS=2
+DEVICE=cuda:0
+EXP_ITERS=20
 SLEEP=1
 init:
 	mkdir -p ${LOG}

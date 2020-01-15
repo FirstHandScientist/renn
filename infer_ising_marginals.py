@@ -35,7 +35,7 @@ parser.add_argument('--agreement_pen', default=10, type=float, help='')
 parser.add_argument('--device', default='cpu', type=str, help='which gpu to use')
 parser.add_argument('--seed', default=3435, type=int, help='random seed')
 parser.add_argument('--optmz_alpha', action='store_true', help='whether to optimize alphas in alpha bp')
-parser.add_argument('--damp', default=0.9, type=float, help='')
+parser.add_argument('--damp', default=0.5, type=float, help='')
 parser.add_argument('--unary_std', default=1.0, type=float, help='')
 
 parser.add_argument('--task', default="infer_result_n5_std1.0.txt", type=str, help='the task to carry on.')
@@ -143,8 +143,8 @@ if __name__ == '__main__':
     args.n = int(num_node)
     args.unary_std = float(unary_std)
     
-    args.method = ['mf', 'bp', 'dbp', 'abp']
-    args.method = ['mf','gbp', 'kikuchi']
+
+    args.method = ['mf','bp', 'dbp','gbp','bethe', 'kikuchi']
     
     time.sleep(np.random.randint(args.sleep))
     if args.device != 'cpu':
