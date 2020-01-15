@@ -58,7 +58,8 @@ def p2cbp_infer(ising, args):
     Generalized BP, the parent2child algorithm.
     """
     model = ising
-    model.generate_region_graph()
+    if model.region_graph == None:
+        model.generate_region_graph()
     
     gbp = parent2child_algo(graph=model.region_graph, n_iters=args.msg_iters)
     gbp.inference()
@@ -144,9 +145,9 @@ class bethe_net_infer(torch.nn.Module):
             unary_marginals_enc = unary_marginals_enc_new.detach()
             binary_marginals_enc = binary_marginals_enc_new.detach()
 
-        with torch.no_grad():
-            unary_marginals_enc, binary_marginals_enc = self.encoder(self.ising.binary_idx)
-        log_Z_enc = -self.ising.bethe_energy(unary_marginals_enc, binary_marginals_enc)  
+        
+        
+        log_Z_enc = -self.ising.bethe_energy(unary_marginals_enc_new.detach(), binary_marginals_enc_new.detach())
 
         return (log_Z_enc, unary_marginals_enc, binary_marginals_enc)
 
@@ -154,7 +155,9 @@ class kikuchi_net_infer(torch.nn.Module):
     def __init__(self, ising, args):
         super(kikuchi_net_infer, self).__init__()
         self.model = ising
-        self.model.generate_region_graph()
+        if self.model.region_graph == None:
+            self.model.generate_region_graph()
+            
         self.encoder = ising_models.GeneralizedInferenceNetwork(args.n, args.state_dim, args.num_layers, mlp_out_dim=2**4)
         self.encoder.push2device(self.model.device)
         self.optimizer = torch.optim.Adam(self.encoder.parameters(), lr=args.lr)
@@ -170,7 +173,7 @@ class kikuchi_net_infer(torch.nn.Module):
             
             loss = kikuchi_energy + self.args.agreement_pen * consist_error
             loss.backward()
-
+            
             with torch.no_grad():
                 # print(i,loss)
                 unary_marginals_enc_new, binary_marginals_enc_new =\
@@ -181,7 +184,7 @@ class kikuchi_net_infer(torch.nn.Module):
                 delta_unary = l2(unary_marginals_enc_new, unary_marginals_enc) 
                 delta_binary = l2(binary_marginals_enc_new[:, 1, 1], binary_marginals_enc[:, 1, 1])
                 delta = delta_unary + delta_binary
-                if delta < self.args.eps:
+                if delta < self.args.eps and i > 50:
                     break
 
                 unary_marginals_enc = unary_marginals_enc_new.detach()
