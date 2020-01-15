@@ -12,7 +12,7 @@ RESULTS=${EXP}_score
 #experiment argument
 DEVICE=cuda:0
 EXP_ITERS=20
-SLEEP=1
+SLEEP=10
 init:
 	mkdir -p ${LOG}
 

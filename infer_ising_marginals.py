@@ -148,7 +148,7 @@ if __name__ == '__main__':
     
     time.sleep(np.random.randint(args.sleep))
     if args.device != 'cpu':
-        args.device = get_freer_gpu()
+        args.device = torch.device('cuda:{}'.format(int(get_freer_gpu()) ))
     
     results = {key: {'l1':[], 'corr':[], 'time':[]} for key in args.method}
 
