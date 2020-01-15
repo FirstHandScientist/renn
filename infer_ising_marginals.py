@@ -18,7 +18,7 @@ from torch.nn.init import xavier_uniform_
 from functools import partial
 
 from rens.models import ising as ising_models
-from rens.utils.utils import corr, l2, l1, get_scores, binary2unary_marginals
+from rens.utils.utils import corr, l2, l1, get_scores, binary2unary_marginals, get_freer_gpu
 from rens.models.inference_ising import bp_infer, p2cbp_infer, mean_field_infer, bethe_net_infer, kikuchi_net_infer
 
 # Model options
@@ -39,6 +39,7 @@ parser.add_argument('--damp', default=0.9, type=float, help='')
 parser.add_argument('--unary_std', default=1.0, type=float, help='')
 
 parser.add_argument('--task', default="infer_result_n5_std1.0.txt", type=str, help='the task to carry on.')
+parser.add_argument('--sleep', default=1, type=int, help='sleep a time a beginning.')
 
 
     
@@ -145,7 +146,9 @@ if __name__ == '__main__':
     args.method = ['mf', 'bp', 'dbp', 'abp']
     args.method = ['mf','gbp', 'kikuchi']
     
-
+    time.sleep(np.random.randint(args.sleep))
+    if args.device != 'cpu':
+        args.device = get_freer_gpu()
     
     results = {key: {'l1':[], 'corr':[], 'time':[]} for key in args.method}
 

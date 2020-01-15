@@ -6,3 +6,4 @@ pyparsing
 statsmodels
 tqdm
 joblib
+parse

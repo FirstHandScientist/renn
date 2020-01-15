@@ -12,7 +12,7 @@ RESULTS=${EXP}_score
 #experiment argument
 DEVICE=cpu
 EXP_ITERS=2
-
+SLEEP=1
 init:
 	mkdir -p ${LOG}
 
@@ -20,4 +20,4 @@ ising_infer: $(shell echo ${LOG}/${RESULTS}_n${GRID_N}_std${UNARY_STD}.txt)
 
 
 ${LOG}/${RESULTS}%.txt: init
-	${PYTHON} infer_ising_marginals.py --device ${DEVICE} --exp_iters ${EXP_ITERS} --task $@ > $@	
+	${PYTHON} infer_ising_marginals.py --sleep ${SLEEP} --device ${DEVICE} --exp_iters ${EXP_ITERS} --task $@ > $@	

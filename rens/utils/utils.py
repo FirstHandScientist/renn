@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-
+import os
 
 def corr(t1, t2):
     if t1.device.type == 'cpu':
@@ -87,3 +87,7 @@ def get_binary_marginals_of_region_graph(graph, binary_regions, key='belief'):
 
     return torch.stack(binary_marginals, 0)
     
+def get_freer_gpu():
+    os.system('nvidia-smi -q -d Memory |grep -A4 GPU|grep Free >tmp')
+    memory_available = [int(x.split()[2]) for x in open('tmp', 'r').readlines()]
+    return np.argmax(memory_available)
