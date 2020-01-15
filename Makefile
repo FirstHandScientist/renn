@@ -6,7 +6,9 @@ LOG=log
 GRID_N={5,10,15,20,30}
 UNARY_STD={0.1,1.0}
 
-EXP=infer_grid
+# STRUCTURE should be: grid | full_connected
+STRUCTURE=full_connected
+EXP=infer_${STRUCTURE}
 RESULTS=${EXP}_score
 
 #experiment argument
@@ -20,4 +22,4 @@ ising_infer: $(shell echo ${LOG}/${RESULTS}_n${GRID_N}_std${UNARY_STD}.txt)
 
 
 ${LOG}/${RESULTS}%.txt: init
-	${PYTHON} infer_ising_marginals.py --sleep ${SLEEP} --device ${DEVICE} --exp_iters ${EXP_ITERS} --task $@ > $@	
+	${PYTHON} infer_ising_marginals.py --structure ${STRUCTURE} --sleep ${SLEEP} --device ${DEVICE} --exp_iters ${EXP_ITERS} --task $@ > $@	
