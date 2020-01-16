@@ -1,4 +1,5 @@
 import os
+import itertools
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -453,7 +454,10 @@ class Ising(nn.Module):
             return regions
         elif self.structure == 'full_connected':
             region = set()
-            for comb in itertools.combinations(range(n**2), 3):
+            root = [0]
+            rests = range(1, n**2)
+            for pair in itertools.combinations(rests, 2):
+                comb = root + list(pair)
                 region.add(tuple(sorted(list(comb))))
             return region
 
@@ -531,26 +535,33 @@ class Ising(nn.Module):
         # calculate log partition of an ising model via variable elimination
         # unary : n**2 of unary log potentials
         # binary: n**2 x n**2 edge log potentials
-        if order is None:
-            order = list(range(self.n**2))
-        n = self.n
-        binary = self.binary*self.mask
-        unary = self.unary
-        factors = []
-        for i in range(n**2):
-            unary_factor = torch.stack([-unary[i], unary[i]], 0)
-            factors.append([[i], unary_factor])
-        for i in range(n**2):
-            for j in range(i+1, n **2):                        
-                if (i + 1 == j and (i+1) % n != 0) or (j - i == n and i < n**2 - 1):
-                    binary_factor = torch.stack([binary[i][j], -binary[i][j]], 0)
-                    binary_factor = torch.stack([binary_factor, -binary_factor], 1)
-                    factors.append([[i, j], binary_factor])
-        assert(len(factors) == n**2 + 2*n*(n-1))
-        self.new_factors = []
-        for i in order:
-            factors = self.sum_factor(factors, i)
-        log_Z = factors[0][-1]
+        if self.structure == 'grid':
+            if order is None:
+                order = list(range(self.n**2))
+            n = self.n
+            binary = self.binary*self.mask
+            unary = self.unary
+            factors = []
+            for i in range(n**2):
+                unary_factor = torch.stack([-unary[i], unary[i]], 0)
+                factors.append([[i], unary_factor])
+            for i in range(n**2):
+                for j in range(i+1, n **2):                        
+                    if (i + 1 == j and (i+1) % n != 0) or (j - i == n and i < n**2 - 1):
+                        binary_factor = torch.stack([binary[i][j], -binary[i][j]], 0)
+                        binary_factor = torch.stack([binary_factor, -binary_factor], 1)
+                        factors.append([[i, j], binary_factor])
+            assert(len(factors) == n**2 + 2*n*(n-1))
+            self.new_factors = []
+            for i in order:
+                factors = self.sum_factor(factors, i)
+            log_Z = factors[0][-1]
+        else:
+            allx_iterater = itertools.product([-1,1], repeat=self.n**2)
+            all_logpx = [self.log_energy(torch.FloatTensor(list(x)).unsqueeze(0).to(self.device)) for x in allx_iterater]
+            all_logpx = torch.cat(all_logpx, 0)
+            log_Z = torch.exp(all_logpx).sum().log()
+        
         return log_Z
     
     def log_partition_lbp(self):
