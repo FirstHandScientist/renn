@@ -91,3 +91,9 @@ def get_freer_gpu():
     os.system('nvidia-smi -q -d Memory |grep -A4 GPU|grep Free >tmp')
     memory_available = [int(x.split()[2]) for x in open('tmp', 'r').readlines()]
     return np.argmax(memory_available)
+
+def clip_optimizer_params(optimizer, max_norm):
+    for group in optimizer.param_groups:
+        torch.nn.utils.clip_grad_norm_(group['params'], max_norm)
+    return optimizer
+        

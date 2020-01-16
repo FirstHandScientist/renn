@@ -19,6 +19,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from rens.models import ising as ising_models
 from rens.utils.utils import corr, l2, l1, get_scores, binary2unary_marginals
+from rens.utils.utils import clip_optimizer_params
 from rens.models.inference_ising import bp_infer, p2cbp_infer, mean_field_infer, bethe_net_infer, kikuchi_net_infer
 
 # Model options
@@ -31,6 +32,8 @@ parser.add_argument('--eps', default=1e-5, type=float, help="threshold for stopp
 parser.add_argument('--num_layers', default=1, type=int)
 parser.add_argument('--state_dim', default=200, type=int)
 parser.add_argument('--lr', default=0.001, type=float)
+parser.add_argument('--clip', type=float, default=5, help='gradient clipping')
+
 parser.add_argument('--agreement_pen', default=10, type=float, help='')
 parser.add_argument('--gpu', default=0, type=int, help='which gpu to use')
 parser.add_argument('--seed', default=3435, type=int, help='random seed')
@@ -133,7 +136,7 @@ def main(args, seed=3435, verbose=True):
                                   shuffle=True,
                                   drop_last=False)
     
-    optimizer = torch.optim.Adam([ising.unary, ising.binary], lr=args.lr * 20)
+    
     
 
     # training with exact inference (variable elimination)
@@ -145,21 +148,35 @@ def main(args, seed=3435, verbose=True):
         inference_method = partial(bp_infer, ising=ising, args=args, solver='lbp')
     elif args.infer == 'dbp':
         inference_method = partial(bp_infer, ising=ising, args=args, solver='dampbp')
+    elif args.infer == 'gbp':
+        inference_method = partial(p2cbp_infer, ising=ising, args=args)
     elif args.infer == 'bethe':
-        inference_method = bethe_net_infer(ising=ising, args=args)
+        inference_method_f = bethe_net_infer(ising=ising, args=args)
+        inference_method = partial(inference_method_f, learn_model=True)
+
     elif args.infer == 'kikuchi':
-        inference_method = kikuchi_net_infer(ising=ising, args=args)
-    
+        inference_method_f = kikuchi_net_infer(ising=ising, args=args)
+        inference_method = partial(inference_method_f, learn_model=True)
+
     else:
         print("Your assigned inference method is not available.")
         os.exit(1)
+    # define the optimizer
+    if args.infer in ['ve', 'mf', 'lbp', 'dbp', 'gbp']:
+        optimizer = torch.optim.Adam([ising.unary, ising.binary], lr=args.lr * 10)
+    elif args.infer in ['bethe', "kikuchi"]:
+        optimizer = torch.optim.Adam([{"params": ising.parameters() , "lr":args.lr * 3},
+                                      {"params": inference_method_f.encoder.parameters() , \
+                                       "lr": args.lr}])
+
+
 
     best_nll = float('inf')
     avg_time_per_iter = []
     fifo_loss = deque(maxlen=args.fifo_maxlen)
     for cur_iter in range(args.train_iters):
         time_begin = time.time()
-        train_avg_nll = ising.trainer(train_data_loader, inference_method, 1, optimizer)
+        train_avg_nll = ising.trainer(train_data_loader, inference_method, 1, optimizer, args.clip)
         time_end = time.time()
         test_avg_nll = ising.test_nll(test_data_loader, inference_method)
         if best_nll > test_avg_nll:

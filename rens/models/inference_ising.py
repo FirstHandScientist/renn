@@ -108,7 +108,7 @@ def mean_field_infer(ising, args):
         binary_marginals_mf = binary_marginals_mf_new.detach()
 
     log_Z_mf = -ising.bethe_energy(unary_marginals_mf, binary_marginals_mf)
-    log_Z_mf_energy = -ising.free_energy_mf(unary_marginals_mf)
+    log_Z_mf_energy = -ising.free_energy_mf(unary_marginals_mf.detach())
 
     return (log_Z_mf_energy, unary_marginals_mf, binary_marginals_mf)
 
@@ -124,7 +124,7 @@ class bethe_net_infer(torch.nn.Module):
         self.optimizer = torch.optim.Adam(self.encoder.parameters(), lr=args.lr)
         self.args = args
 
-    def forward(self):
+    def forward(self, learn_model=False):
         unary_marginals_enc = torch.zeros(self.ising.n ** 2).fill_(0.5).to(self.device)
         binary_marginals_enc = torch.zeros([len(self.ising.binary_idx), 2, 2]).fill_(0.25).to(self.device)
 
@@ -147,10 +147,14 @@ class bethe_net_infer(torch.nn.Module):
             binary_marginals_enc = binary_marginals_enc_new.detach()
 
         
-        
-        log_Z_enc = -self.ising.bethe_energy(unary_marginals_enc_new.detach(), binary_marginals_enc_new.detach())
+        if not learn_model:
+            log_Z_enc = -self.ising.bethe_energy(unary_marginals_enc, binary_marginals_enc)
+            return (log_Z_enc, unary_marginals_enc, binary_marginals_enc)
+        else:
+            bethe_enc = self.ising.bethe_energy(unary_marginals_enc, binary_marginals_enc)
+            agreement_loss = self.encoder.agreement_penalty(self.ising.binary_idx, unary_marginals_enc, binary_marginals_enc)
 
-        return (log_Z_enc, unary_marginals_enc, binary_marginals_enc)
+            return (-bethe_enc, - agreement_loss, len(self.ising.binary_idx))
 
 class kikuchi_net_infer(torch.nn.Module):
     def __init__(self, ising, args):
@@ -164,7 +168,7 @@ class kikuchi_net_infer(torch.nn.Module):
         self.optimizer = torch.optim.Adam(self.encoder.parameters(), lr=args.lr)
         self.args = args
 
-    def forward(self):
+    def forward(self, learn_model=False):
         unary_marginals_enc = torch.zeros(self.model.n ** 2).fill_(0.5).to(self.model.device)
         binary_marginals_enc = torch.zeros([len(self.model.binary_idx), 2, 2]).fill_(0.25).to(self.model.device)
 
@@ -185,7 +189,7 @@ class kikuchi_net_infer(torch.nn.Module):
                 delta_unary = l2(unary_marginals_enc_new, unary_marginals_enc) 
                 delta_binary = l2(binary_marginals_enc_new[:, 1, 1], binary_marginals_enc[:, 1, 1])
                 delta = delta_unary + delta_binary
-                if delta < self.args.eps and i > 50:
+                if delta < self.args.eps and i > 10:
                     break
 
                 unary_marginals_enc = unary_marginals_enc_new.detach()
@@ -194,8 +198,13 @@ class kikuchi_net_infer(torch.nn.Module):
             self.optimizer.step()
 
         # compute the region based energy to estimated partition function
-
         kikuchi_energy, consist_error = self.encoder(self.model.region_graph)
+        if not learn_model:
+            return (-kikuchi_energy, unary_marginals_enc, binary_marginals_enc)
+        else:
+            match_node_num = int(self.model.region_graph.number_of_nodes()) - \
+                len(self.model.region_graph.region_layers['R0'])
+            return (-kikuchi_energy, -consist_error, match_node_num)
 
 
-        return (-kikuchi_energy, unary_marginals_enc, binary_marginals_enc)
+        

@@ -12,7 +12,7 @@ from pgmpy.factors.discrete import PTDiscreteFactor
 from rens.utils.spanning_tree import edge_appear_rate
 from rens.utils.utils import get_binary_marginals_of_region_graph
 from rens.utils.utils import binary2unary_marginals
-
+from rens.utils.utils import clip_optimizer_params
 def logadd(x, y):
     d = torch.max(x,y)  
     return torch.log(torch.exp(x-d) + torch.exp(y-d)) + d    
@@ -955,7 +955,7 @@ class Ising(nn.Module):
             bethe += binary_factor_ij.sum()
         return bethe
 
-    def trainer(self, dataloader, infer_method, num_epoch, optimizer):
+    def trainer(self, dataloader, infer_method, num_epoch, optimizer, max_norm):
         """
         Do the learning of ising model with given dataset, and inference method.
         """
@@ -966,13 +966,14 @@ class Ising(nn.Module):
                 loss = - self.log_energy(batch)
                 log_Z = infer_method()
                 if isinstance(log_Z, tuple):
-                    log_Z = log_Z[0]
+                    log_Z = log_Z[0] + log_Z[1] * 1.0 / float(log_Z[2])
                     
                 loss += log_Z
                 loss = loss.sum() / batch.size(0)
                 loss.backward()
                 train_nll += loss.detach() * batch.size(0)
                 optimizer.step()
+                clip_optimizer_params(optimizer, max_norm)
                 
         return train_nll / dataloader.dataset.len
     
