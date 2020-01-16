@@ -153,9 +153,10 @@ if __name__ == '__main__':
     # run multiple number of experiments, and collect the stats of performance.
     # args.method = ['mf', 'bp', 'gbp', 'bethe', 'kikuchi']
     # parsing the task first
-    _, num_node, unary_std = parse("{}_n{}_std{}.txt", args.task)
+    _, num_node, unary_std, penalty = parse("{}_n{}_std{}_pen{}.txt", args.task)
     args.n = int(num_node)
     args.unary_std = float(unary_std)
+    args.agreement_pen = float(penalty)
     
 
     args.method = ['mf','bp', 'dbp','gbp','bethe', 'kikuchi']
