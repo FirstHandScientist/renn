@@ -939,6 +939,10 @@ class Ising(nn.Module):
         
         
     def bethe_energy(self, unary_marginals, binary_marginals):
+        # in case there are close to zero probability
+        unary_marginals = torch.clamp(unary_marginals, min=1e-8)
+        binary_marginals = torch.clamp(binary_marginals, min=1e-8)
+        
         binary = self.binary*self.mask
         unary = self.unary
         unary1 = self.unary

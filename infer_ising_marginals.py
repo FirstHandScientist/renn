@@ -166,9 +166,20 @@ if __name__ == '__main__':
         args.device = torch.device('cuda:{}'.format(int(get_freer_gpu()) ))
     
     results = {key: {'l1':[], 'corr':[], 'logz_err':[], 'time':[]} for key in args.method}
-
+    # check if nan in results
+    def valid_exp(d):
+        valid= True
+        for key, value in d.items():
+            for crt, score in value.items():
+                if np.isnan(score):
+                    valid=False
+        return valid
+        
     for k in range(args.exp_iters):
         d = run_marginal_exp(args, k+10)
+        if not valid_exp(d):
+                continue
+
         for key, value in d.items():
             for crt, score in value.items():
                 results[key][crt].append(score)
