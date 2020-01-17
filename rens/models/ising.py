@@ -70,6 +70,7 @@ class TransformerInferenceNetwork(nn.Module):
         self.mlp = nn.Sequential(ResidualLayer(state_dim*local_times, state_dim*local_times), 
                                  ResidualLayer(state_dim*local_times, state_dim*local_times), 
                                  nn.Linear(state_dim*local_times, mlp_out_dim))
+        
         self.num_layers = num_layers
         self.mask = torch.zeros(n**2, n**2).fill_(0)
         self.binary_mlp = nn.Sequential(ResidualLayer(state_dim, state_dim),
@@ -117,7 +118,14 @@ class TransformerInferenceNetwork(nn.Module):
         return loss
 
 class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
-
+    def __init__(self, n, state_dim = 100, num_layers = 1, mlp_out_dim=4):
+        super(GeneralizedInferenceNetwork, self).__init__(n, state_dim, num_layers, mlp_out_dim)
+        inf_card = self.n * 4 - 4
+        self.mlp_inf = nn.Sequential(ResidualLayer(state_dim*inf_card, state_dim*inf_card), 
+                                 ResidualLayer(state_dim*inf_card, state_dim*inf_card), 
+                                 nn.Linear(state_dim*inf_card, 2 ** inf_card))
+        
+        
     def push2device(self, device):
         self.to(device)
         self.device = device
@@ -134,15 +142,24 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
 
         # here output of attn_layers is embedding vector e
         region_features = []
-        for region in region_idx:
+        region_idx_cp= region_idx.copy()
+        infinite_region = region_idx_cp.pop(-1)
+        for region in region_idx_cp:
             emb_rg = torch.cat([x[0][i] for i in region], 0) # state_dim*2            
             region_features.append(emb_rg)
             
-        region_features = torch.stack(region_features, 0) # |R0| x state_dim*2        
+        region_features = torch.stack(region_features, 0) # |R0| x state_dim*2
+        # deal with the infinite region here
+        emb_inf = torch.cat([x[0][i] for i in infinite_region], 0)
+        
+        region_inf_prob = F.softmax(self.mlp_inf(emb_inf))
+        graph.nodes[infinite_region][self.belief_name] = PTDiscreteFactor([str(i) for i in infinite_region], [2] * len(infinite_region), region_inf_prob)
+        
+        # dealing with rest regular regions
         region_logits = self.mlp(region_features) 
         # region_logits = [h_1, h_2, ... h_n2]
         region_prob = F.softmax(region_logits, dim = 1)
-        output_shape = [len(region_idx)] + [2] * graph.r0_elmt_size
+        output_shape = [len(region_idx_cp)] + [2] * graph.r0_elmt_size
         r0_beliefs = region_prob.view(output_shape)
         consist_error = self.marginal_down(r0_beliefs, graph)
         energy = self.kikuchi_energy(graph)
@@ -162,6 +179,9 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
  
     def attach_r0_belief(self, r0_beliefs, graph):
         for idx, node in enumerate(graph.region_layers['R0']):
+            if len(node) == self.n *4 -4:
+                # infinite region is not dealt here
+                break
             graph.nodes[node][self.belief_name] = PTDiscreteFactor([str(i) for i in node], [2] * len(node), r0_beliefs[idx])
         return graph
 
@@ -391,8 +411,8 @@ class Ising(nn.Module):
                 except:
                     print("error")
 
-        for key, value in self.log_phis.items():
-            self.log_phis[key] = torch.stack(value)
+        # for key, value in self.log_phis.items():
+        #     self.log_phis[key] = torch.stack(value)
         
         return self
 

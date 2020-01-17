@@ -117,8 +117,8 @@ def run_marginal_exp(args, seed=3435, verbose=True):
 
     # Bethe net
     if 'bethe' in args.method:
-        time_start = time.time()
         bethe_net = bethe_net_infer(ising, args)
+        time_start = time.time()
         mrgnl_bethe = bethe_net()
         scores_bethe = p_get_scores(test_ub=(mrgnl_bethe[1], mrgnl_bethe[2]))
         time_end = time.time()
@@ -132,8 +132,8 @@ def run_marginal_exp(args, seed=3435, verbose=True):
 
     # Generalized net
     if 'kikuchi' in args.method:
-        time_start = time.time()
         kikuchi_net = kikuchi_net_infer(ising, args)
+        time_start = time.time()
         mrgnl_kikuchi = kikuchi_net()
         scores_kikuchi = p_get_scores(test_ub=(mrgnl_kikuchi[1].to(unary_marginals), mrgnl_kikuchi[2].to(unary_marginals)))
         time_end = time.time()
@@ -159,6 +159,7 @@ if __name__ == '__main__':
     
 
     args.method = ['mf','bp', 'dbp','gbp','bethe', 'kikuchi']
+    # args.method = ['gbp', 'kikuchi']
     
     time.sleep(np.random.randint(args.sleep))
     if args.device != 'cpu':
@@ -166,8 +167,21 @@ if __name__ == '__main__':
     
     results = {key: {'l1':[], 'corr':[], 'logz_err':[], 'time':[]} for key in args.method}
 
+    # drop if encounter numerical problem
+    def valid_exp(d):
+        valid = True
+        for key, value in d.items():
+            for crt, score in value.items():
+                if np.isnan(score):
+                    valid = False
+        return valid
+    
     for k in range(args.exp_iters):
         d = run_marginal_exp(args, k+10)
+        if not valid_exp(d):
+            continue
+        # collect valid experiment results
+        print('Collect this valid result...')
         for key, value in d.items():
             for crt, score in value.items():
                 results[key][crt].append(score)
