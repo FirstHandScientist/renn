@@ -449,6 +449,15 @@ class Ising(nn.Module):
                     j += step
 
                 i += step
+            # also include the infinite face of grid
+            in_face = []
+            in_face += [i for i in range(n)]
+            in_face += [i for i in range(n*(n-1), n**2)]
+            if n >2:
+                in_face += [ i*n for i in range(1, n-1)]
+                in_face += [ (i+1)*n - 1 for i in range(1, n-1)]
+            in_face = sorted(in_face)
+            regions.append(in_face)
 
             return regions
         elif self.structure == 'full_connected':
