@@ -206,5 +206,11 @@ class kikuchi_net_infer(torch.nn.Module):
                 len(self.model.region_graph.region_layers['R0'])
             return (-kikuchi_energy, -consist_error, match_node_num)
 
+    def neg_free_energy(self):
+        kikuchi_energy, consist_error = self.encoder(self.model.region_graph)
+        match_node_num = int(self.model.region_graph.number_of_nodes()) - \
+            len(self.model.region_graph.region_layers['R0'])
+        return (-kikuchi_energy, -consist_error, match_node_num)
+
 
         

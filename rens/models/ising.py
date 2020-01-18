@@ -14,6 +14,8 @@ from rens.utils.spanning_tree import edge_appear_rate
 from rens.utils.utils import get_binary_marginals_of_region_graph
 from rens.utils.utils import binary2unary_marginals
 from rens.utils.utils import clip_optimizer_params
+from rens.models.inference_ising import kikuchi_net_infer, bethe_net_infer, mean_field_infer, p2cbp_infer, bp_infer
+
 def logadd(x, y):
     d = torch.max(x,y)  
     return torch.log(torch.exp(x-d) + torch.exp(y-d)) + d    
@@ -970,7 +972,7 @@ class Ising(nn.Module):
             bethe += binary_factor_ij.sum()
         return bethe
 
-    def trainer(self, dataloader, infer_method, num_epoch, optimizer, max_norm):
+    def trainer(self, dataloader, infer_method, num_epoch, optimizer, max_norm, is_net):
         """
         Do the learning of ising model with given dataset, and inference method.
         """
@@ -979,9 +981,11 @@ class Ising(nn.Module):
             for i_batch, batch in enumerate(dataloader):
                 optimizer.zero_grad()
                 loss = - self.log_energy(batch)
-                log_Z = infer_method()
-                if isinstance(log_Z, tuple):
-                    log_Z = log_Z[0] + log_Z[1] * 1.0 / float(log_Z[2])
+                if not is_net:
+                    log_Z, _, _ = infer_method()
+                else:
+                    neg_free_energy, consist_error, match_node_num = infer_method()
+                    log_Z = neg_free_energy + consist_error * 1.0 / float(match_node_num)
                     
                 loss += log_Z
                 loss = loss.sum() / batch.size(0)

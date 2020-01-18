@@ -155,8 +155,8 @@ def main(args, seed=3435, verbose=True):
         inference_method = partial(inference_method_f, learn_model=True)
 
     elif args.infer == 'kikuchi':
-        inference_method_f = kikuchi_net_infer(ising=ising, args=args)
-        inference_method = partial(inference_method_f, learn_model=True)
+        inference_method = kikuchi_net_infer(ising=ising, args=args)
+        
 
     else:
         print("Your assigned inference method is not available.")
@@ -166,7 +166,7 @@ def main(args, seed=3435, verbose=True):
         optimizer = torch.optim.Adam([ising.unary, ising.binary], lr=args.lr * 10)
     elif args.infer in ['bethe', "kikuchi"]:
         optimizer = torch.optim.Adam([{"params": ising.parameters() , "lr":args.lr * 3},
-                                      {"params": inference_method_f.encoder.parameters() , \
+                                      {"params": inference_method.encoder.parameters() , \
                                        "lr": args.lr}])
 
 
@@ -176,7 +176,21 @@ def main(args, seed=3435, verbose=True):
     fifo_loss = deque(maxlen=args.fifo_maxlen)
     for cur_iter in range(args.train_iters):
         time_begin = time.time()
-        train_avg_nll = ising.trainer(train_data_loader, inference_method, 1, optimizer, args.clip)
+        try:
+            isinstance(inference_method, kikuchi_net_infer, isinstance(bethe_net_infer))
+            infer_method_type = "net"
+        except TypeError:
+            infer_method_type = "mspassing"
+        if infer_method_type == "net":
+            # for renn and bethe cases
+            _, _ , _ = inference_method()
+            log_Z_computer = partial(inference_method.neg_free_energy)
+            # maybe, use the inferred marginals to get a partition function, unary, binary ---> bethe energy
+            train_avg_nll = ising.trainer(train_data_loader, log_Z_computer, 20, optimizer, args.clip, True)
+        else:
+            # for mf, lbp, gbp cases
+            train_avg_nll = ising.trainer(train_data_loader, inference_method, 1, optimizer, args.clip, False)
+        
         time_end = time.time()
         test_avg_nll = ising.test_nll(test_data_loader, inference_method)
         if best_nll > test_avg_nll:
