@@ -177,7 +177,7 @@ def main(args, seed=3435, verbose=True):
     for cur_iter in range(args.train_iters):
         time_begin = time.time()
         try:
-            isinstance(inference_method, kikuchi_net_infer, isinstance(bethe_net_infer))
+            isinstance(inference_method, (kikuchi_net_infer, bethe_net_infer))
             infer_method_type = "net"
         except TypeError:
             infer_method_type = "mspassing"
@@ -186,10 +186,10 @@ def main(args, seed=3435, verbose=True):
             _, _ , _ = inference_method()
             log_Z_computer = partial(inference_method.neg_free_energy)
             # maybe, use the inferred marginals to get a partition function, unary, binary ---> bethe energy
-            train_avg_nll = ising.trainer(train_data_loader, log_Z_computer, 20, optimizer, args.clip, True)
+            train_avg_nll = ising.trainer(train_data_loader, log_Z_computer, 20, optimizer, args.clip, args.agreement_pen, True)
         else:
             # for mf, lbp, gbp cases
-            train_avg_nll = ising.trainer(train_data_loader, inference_method, 1, optimizer, args.clip, False)
+            train_avg_nll = ising.trainer(train_data_loader, inference_method, 1, optimizer, args.clip, args.agreement_pen, False)
         
         time_end = time.time()
         test_avg_nll = ising.test_nll(test_data_loader, inference_method)

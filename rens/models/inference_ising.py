@@ -207,10 +207,25 @@ class kikuchi_net_infer(torch.nn.Module):
             return (-kikuchi_energy, -consist_error, match_node_num)
 
     def neg_free_energy(self):
-        kikuchi_energy, consist_error = self.encoder(self.model.region_graph)
+        """Compute the Kikuchi free energy"""
+        # kikuchi_energy, consist_error = self.encoder(self.model.region_graph)
+        graph = self.model.region_graph
+        energy = 0
+        belief_name = 'net_belief'
+        self.model._init_disfactor()
+        self.model.attach_region_factors(graph)
+        for node in graph.nodes():
+            graph.nodes[node][belief_name].values = torch.clamp(graph.nodes[node][belief_name].values.detach(), min=1e-8)
+            energy += torch.sum(graph.nodes[node][belief_name].values * \
+                       (graph.nodes[node][belief_name].values.log() - \
+                        graph.nodes[node]['log_phi'].values)) * \
+                        graph.nodes[node]['weight']
+
+        # energy
+        
         match_node_num = int(self.model.region_graph.number_of_nodes()) - \
             len(self.model.region_graph.region_layers['R0'])
-        return (-kikuchi_energy, -consist_error, match_node_num)
+        return (-energy, 0, match_node_num)
 
 
         

@@ -156,6 +156,7 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
         """Compute the Kikuchi free energy"""
         energy = 0
         for node in graph.nodes():
+            graph.nodes[node][self.belief_name].values = torch.clamp(graph.nodes[node][self.belief_name].values, min=1e-8)
             energy += torch.sum(graph.nodes[node][self.belief_name].values * \
                        (graph.nodes[node][self.belief_name].values.log() - \
                         graph.nodes[node]['log_phi'].values.detach())) * \
@@ -972,7 +973,7 @@ class Ising(nn.Module):
             bethe += binary_factor_ij.sum()
         return bethe
 
-    def trainer(self, dataloader, infer_method, num_epoch, optimizer, max_norm, is_net):
+    def trainer(self, dataloader, infer_method, num_epoch, optimizer, max_norm, agg_pen,is_net):
         """
         Do the learning of ising model with given dataset, and inference method.
         """
@@ -985,7 +986,8 @@ class Ising(nn.Module):
                     log_Z, _, _ = infer_method()
                 else:
                     neg_free_energy, consist_error, match_node_num = infer_method()
-                    log_Z = neg_free_energy + consist_error * 1.0 / float(match_node_num)
+                    
+                    log_Z = neg_free_energy + consist_error * agg_pen
                     
                 loss += log_Z
                 loss = loss.sum() / batch.size(0)
