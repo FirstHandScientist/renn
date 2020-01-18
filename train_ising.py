@@ -48,7 +48,7 @@ parser.add_argument('--train_size', default=100, type=int, help='the size of tra
 parser.add_argument('--valid_size', default=50, type=int, help='the size of valid samples')
 parser.add_argument('--test_size', default=50, type=int, help='the size of testing samples')
 parser.add_argument('--batch_size', default=100, type=int, help='the size of batch samples')
-parser.add_argument('--train_iters', default=300, type=int, help='the number of iterations to train')
+parser.add_argument('--train_iters', default=200, type=int, help='the number of iterations to train')
 parser.add_argument('--infer', default='ve', type=str, help='the inference method to use')
 parser.add_argument('--fifo_maxlen', default=4, type=int, help='')
 parser.add_argument('--conv_tol', default=1e-3, type=float, help='')
@@ -149,7 +149,7 @@ def main(args, seed=3435, verbose=True):
     elif args.infer == 'dbp':
         inference_method = partial(bp_infer, ising=ising, args=args, solver='dampbp')
     elif args.infer == 'gbp':
-        inference_method = partial(p2cbp_infer, ising=ising, args=args)
+        inference_method = partial(p2cbp_infer, ising=ising, args=args, learn_model=True)
     elif args.infer == 'bethe':
         inference_method_f = bethe_net_infer(ising=ising, args=args)
         inference_method = partial(inference_method_f, learn_model=True)
@@ -176,20 +176,16 @@ def main(args, seed=3435, verbose=True):
     fifo_loss = deque(maxlen=args.fifo_maxlen)
     for cur_iter in range(args.train_iters):
         time_begin = time.time()
-        try:
-            isinstance(inference_method, (kikuchi_net_infer, bethe_net_infer))
-            infer_method_type = "net"
-        except TypeError:
-            infer_method_type = "mspassing"
-        if infer_method_type == "net":
+            
+        if args.infer in ['kikuchi', 'bethe']:
             # for renn and bethe cases
             _, _ , _ = inference_method()
             log_Z_computer = partial(inference_method.neg_free_energy)
             # maybe, use the inferred marginals to get a partition function, unary, binary ---> bethe energy
-            train_avg_nll = ising.trainer(train_data_loader, log_Z_computer, 20, optimizer, args.clip, args.agreement_pen, True)
-        else:
+            train_avg_nll = ising.trainer(train_data_loader, log_Z_computer, 20, optimizer, args.clip, args.agreement_pen, args.infer)
+        elif args.infer in ['ve', 'mf', 'lbp', 'dbp', 'gbp']:
             # for mf, lbp, gbp cases
-            train_avg_nll = ising.trainer(train_data_loader, inference_method, 1, optimizer, args.clip, args.agreement_pen, False)
+            train_avg_nll = ising.trainer(train_data_loader, inference_method, 20, optimizer, args.clip, args.agreement_pen, args.infer)
         
         time_end = time.time()
         test_avg_nll = ising.test_nll(test_data_loader, inference_method)

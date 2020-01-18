@@ -53,7 +53,7 @@ def bp_infer(ising, args, solver):
 
     return log_Z_lbp, unary_marginals_lbp, binary_marginals_lbp
 
-def p2cbp_infer(ising, args):
+def p2cbp_infer(ising, args, learn_model=False):
     """
     Generalized BP, the parent2child algorithm.
     """
@@ -61,6 +61,10 @@ def p2cbp_infer(ising, args):
     if model.region_graph == None:
         model.generate_region_graph()
     
+    if learn_model:
+        model._init_disfactor()
+        model.generate_region_graph()
+
     gbp = parent2child_algo(graph=model.region_graph, n_iters=args.msg_iters)
     gbp.inference()
     gbp.read_beliefs()

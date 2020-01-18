@@ -1,4 +1,5 @@
 import os
+import sys
 import itertools
 import torch
 import torch.nn as nn
@@ -973,7 +974,7 @@ class Ising(nn.Module):
             bethe += binary_factor_ij.sum()
         return bethe
 
-    def trainer(self, dataloader, infer_method, num_epoch, optimizer, max_norm, agg_pen,is_net):
+    def trainer(self, dataloader, infer_method, num_epoch, optimizer, max_norm, agg_pen, infer_name):
         """
         Do the learning of ising model with given dataset, and inference method.
         """
@@ -982,12 +983,19 @@ class Ising(nn.Module):
             for i_batch, batch in enumerate(dataloader):
                 optimizer.zero_grad()
                 loss = - self.log_energy(batch)
-                if not is_net:
+                if infer_name in ['mf', 'lbp', 'dbp', 'gbp']:
                     log_Z, _, _ = infer_method()
-                else:
-                    neg_free_energy, consist_error, match_node_num = infer_method()
                     
+                elif infer_name in ['kikuchi', 'bethe']:
+                    neg_free_energy, consist_error, match_node_num = infer_method()
                     log_Z = neg_free_energy + consist_error * agg_pen
+                    
+                elif infer_name in ['ve']:
+                    log_Z = infer_method()
+
+                else:
+                    print('The inference method {} is not supported.'.format(infer_name))
+                    sys.exit(1)
                     
                 loss += log_Z
                 loss = loss.sum() / batch.size(0)
