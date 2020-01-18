@@ -153,9 +153,10 @@ if __name__ == '__main__':
     # run multiple number of experiments, and collect the stats of performance.
     # args.method = ['mf', 'bp', 'gbp', 'bethe', 'kikuchi']
     # parsing the task first
-    _, num_node, unary_std = parse("{}_n{}_std{}.txt", args.task)
+    _, num_node, unary_std, penalty = parse("{}_n{}_std{}_pen{}.txt", args.task)
     args.n = int(num_node)
     args.unary_std = float(unary_std)
+    args.agreement_pen = float(penalty)
     
 
     args.method = ['mf','bp', 'dbp','gbp','bethe', 'kikuchi']
@@ -165,9 +166,20 @@ if __name__ == '__main__':
         args.device = torch.device('cuda:{}'.format(int(get_freer_gpu()) ))
     
     results = {key: {'l1':[], 'corr':[], 'logz_err':[], 'time':[]} for key in args.method}
-
+    # check if nan in results
+    def valid_exp(d):
+        valid= True
+        for key, value in d.items():
+            for crt, score in value.items():
+                if np.isnan(score):
+                    valid=False
+        return valid
+        
     for k in range(args.exp_iters):
         d = run_marginal_exp(args, k+10)
+        if not valid_exp(d):
+                continue
+
         for key, value in d.items():
             for crt, score in value.items():
                 results[key][crt].append(score)
