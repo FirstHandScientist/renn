@@ -3,6 +3,7 @@ import os
 import argparse
 import json
 import random
+import time
 import shutil
 import copy
 import pickle
@@ -19,7 +20,7 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from rens.models import ising as ising_models
 from rens.utils.utils import corr, l2, l1, get_scores, binary2unary_marginals
-from rens.utils.utils import clip_optimizer_params
+from rens.utils.utils import clip_optimizer_params, get_freer_gpu
 from rens.models.inference_ising import bp_infer, p2cbp_infer, mean_field_infer, bethe_net_infer, kikuchi_net_infer
 
 # Model options
@@ -41,7 +42,7 @@ parser.add_argument('--optmz_alpha', action='store_true', help='whether to optim
 parser.add_argument('--damp', default=0.5, type=float, help='')
 parser.add_argument('--unary_std', default=1.0, type=float, help='')
 
-parser.add_argument('--graph_type', default='grid', type=str, help='the graph type of ising model')
+parser.add_argument('--structure', default='grid', type=str, help='the graph type of ising model: grid | full_connected')
 parser.add_argument('--data_dir', default='data', type=str, help='dataset dir')
 parser.add_argument('--data_regain', action='store_true', help='if to regenerate dataset')
 parser.add_argument('--train_size', default=100, type=int, help='the size of training samples')
@@ -52,6 +53,10 @@ parser.add_argument('--train_iters', default=200, type=int, help='the number of 
 parser.add_argument('--infer', default='ve', type=str, help='the inference method to use')
 parser.add_argument('--fifo_maxlen', default=4, type=int, help='')
 parser.add_argument('--conv_tol', default=1e-3, type=float, help='')
+parser.add_argument('--t2i_ratio', default=20, type=int, help='training to inference ratio')
+parser.add_argument('--sleep', default=1, type=int, help='sleep a time a beginning.')
+parser.add_argument('--device', default='cpu', type=str, help='which gpu to use')
+
 
 
 class IsingDataset(Dataset):
@@ -77,7 +82,8 @@ def generate_dataset(args):
     if not os.path.exists(args.data_dir):
         os.makedirs(args.data_dir)
         
-    dataset_dir = os.path.join(args.data_dir, args.graph_type + str(args.n) + '.pkl')
+    dataset_dir = os.path.join(args.data_dir, args.structure + str(args.n) + \
+                               'train' + str(args.train_size) + 'test' + str(args.test_size) + '.pkl')
     
     if args.data_regain or not os.path.exists(dataset_dir):
         # generate all required datset
@@ -110,7 +116,7 @@ def main(args, seed=3435, verbose=True):
     np.random.seed(seed)
     torch.manual_seed(seed)
     
-    ising = ising_models.Ising(args.n, args.unary_std)
+    ising = ising_models.Ising(n=args.n, unary_std=args.unary_std, device=args.device, structure=args.structure)
     
 
     
@@ -160,8 +166,11 @@ def main(args, seed=3435, verbose=True):
         print("Your assigned inference method is not available.")
         os.exit(1)
     # define the optimizer
-    if args.infer in ['ve', 'mf', 'lbp', 'dbp', 'gbp']:
+    if args.infer in ['ve', 'mf', 'lbp', 'dbp']:
         optimizer = torch.optim.Adam([ising.unary, ising.binary], lr=args.lr * 10)
+    elif args.infer in ['gbp']:
+        optimizer = torch.optim.Adam([ising.unary, ising.binary], lr=args.lr * 3)
+
     elif args.infer in ['bethe', "kikuchi"]:
         optimizer = torch.optim.Adam([{"params": ising.parameters() , "lr":args.lr * 3},
                                       {"params": inference_method.encoder.parameters() , \
@@ -180,16 +189,16 @@ def main(args, seed=3435, verbose=True):
             _, _ , _ = inference_method()
             log_Z_computer = partial(inference_method.neg_free_energy)
             # maybe, use the inferred marginals to get a partition function, unary, binary ---> bethe energy
-            train_avg_nll = ising.trainer(train_data_loader, log_Z_computer, 20, optimizer, args.clip, args.agreement_pen, args.infer)
+            train_avg_nll = ising.trainer(train_data_loader, log_Z_computer, args.t2i_ratio, optimizer, args.clip, args.agreement_pen, args.infer)
         elif args.infer in ['ve', 'mf', 'lbp', 'dbp']:
             # for mf, lbp, gbp cases
-            train_avg_nll = ising.trainer(train_data_loader, inference_method, 20, optimizer, args.clip, args.agreement_pen, args.infer)
+            train_avg_nll = ising.trainer(train_data_loader, inference_method, args.t2i_ratio, optimizer, args.clip, args.agreement_pen, args.infer)
         elif args.infer in ['gbp']:
-            ising._init_disfactor()
-            ising.attach_region_factors(ising.region_graph)
+            # ising._init_disfactor()
+            # ising.attach_region_factors(ising.region_graph)
             _ = inference_method()
             log_Z_computer = partial(inference_method.neg_free_energy)
-            train_avg_nll = ising.trainer(train_data_loader, log_Z_computer, 20, optimizer, args.clip, args.agreement_pen, args.infer)
+            train_avg_nll = ising.trainer(train_data_loader, log_Z_computer, args.t2i_ratio, optimizer, args.clip, args.agreement_pen, args.infer)
 
         
         time_end = time.time()
@@ -210,17 +219,18 @@ def main(args, seed=3435, verbose=True):
                 break
 
     avg_time_per_iter = np.array(avg_time_per_iter).mean()
-    print("Average time per epoch: {:8.5f}".format(avg_time_per_iter))
+    print("Average time per epoch: {:8.5f}".format(avg_time_per_iter/args.t2i_ratio))
     return best_nll
 
     
 if __name__ == '__main__':
     args = parser.parse_args()
     # run multiple number of experiments, and collect the stats of performance.
+    time.sleep(np.random.randint(args.sleep))
+    if args.device != 'cpu':
+        args.device = torch.device('cuda:{}'.format(int(get_freer_gpu()) ))
 
-    args.device = 'cpu'
 
-    # generate the dataset
     args = generate_dataset(args)
     d = main(args, np.random.randint(1000))
 
