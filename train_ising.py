@@ -228,7 +228,7 @@ def main(args, seed=3435, verbose=True):
 if __name__ == '__main__':
     args = parser.parse_args()
     # run multiple number of experiments, and collect the stats of performance.
-    _, num_node, unary_std, penalty, algorithm = parse("{}_n{}_std{}_pen{}_algo.{}.txt", args.task)
+    _, num_node, unary_std, penalty, algorithm = parse("{}score_n{}_std{}_pen{}_algo.{}.txt", args.task)
     args.n = int(num_node)
     args.unary_std = float(unary_std)
     args.agreement_pen = float(penalty)
