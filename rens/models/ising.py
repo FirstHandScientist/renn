@@ -983,16 +983,16 @@ class Ising(nn.Module):
             for i_batch, batch in enumerate(dataloader):
                 optimizer.zero_grad()
                 loss = - self.log_energy(batch)
-                if infer_name in ['mf', 'lbp', 'dbp', 'gbp']:
+                if infer_name in ['mf', 'lbp', 'dbp']:
                     log_Z, _, _ = infer_method()
                     
-                elif infer_name in ['kikuchi', 'bethe']:
+                elif infer_name in ['kikuchi', 'bethe', 'gbp']:
                     neg_free_energy, consist_error, match_node_num = infer_method()
                     log_Z = neg_free_energy + consist_error * agg_pen
                     
                 elif infer_name in ['ve']:
                     log_Z = infer_method()
-
+               
                 else:
                     print('The inference method {} is not supported.'.format(infer_name))
                     sys.exit(1)

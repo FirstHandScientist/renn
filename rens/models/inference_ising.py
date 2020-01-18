@@ -53,44 +53,65 @@ def bp_infer(ising, args, solver):
 
     return log_Z_lbp, unary_marginals_lbp, binary_marginals_lbp
 
-def p2cbp_infer(ising, args, learn_model=False):
+class p2cbp_infer(torch.nn.Module):
     """
     Generalized BP, the parent2child algorithm.
     """
-    model = ising
-    if model.region_graph == None:
-        model.generate_region_graph()
-    
-    if learn_model:
-        model._init_disfactor()
-        model.generate_region_graph()
+        
+    def __init__(self, ising, args):
+        super(p2cbp_infer, self).__init__()
+        self.model = ising
+        if self.model.region_graph == None:
+            self.model.generate_region_graph()
+        
+        self.gbp = parent2child_algo(graph=self.model.region_graph, n_iters=args.msg_iters)
 
-    gbp = parent2child_algo(graph=model.region_graph, n_iters=args.msg_iters)
-    gbp.inference()
-    gbp.read_beliefs()
-    kukuchi_energy = gbp.kikuchi_energy()
-    binary_marginals = torch.FloatTensor(len(model.binary_idx), 2, 2)
-    for idx, pair in enumerate(model.binary_idx):
-        if pair in gbp.graph.region_layers["R1"]:
-            # for already gathered belief in gbp
-            binary_marginals[idx] = gbp.graph.nodes[pair]['belief'].values
-        else:
-            # for belief not gathered in gbp
-            pair_belief = 0
-            parents_of_pair = gbp.graph.get_supernode_of(pair)
-            assert len(parents_of_pair)==1
-            for p_node in parents_of_pair:
-                to_marginal_idx = tuple(sorted(set(p_node) - set(pair)))
-                p_belief = gbp.graph.nodes[p_node]['belief'].copy()
-                p_belief.marginalize([str(i) for i in to_marginal_idx], inplace=True)
-                p_belief.normalize(inplace=True)
-                pair_belief += p_belief.values
+    def forward(self):
+        self.gbp.inference()
+        self.gbp.read_beliefs()
+        kikuchi_energy = self.gbp.kikuchi_energy()
+        binary_marginals = torch.FloatTensor(len(self.model.binary_idx), 2, 2)
+        for idx, pair in enumerate(self.model.binary_idx):
+            if pair in self.gbp.graph.region_layers["R1"]:
+                # for already gathered belief in gbp
+                binary_marginals[idx] = self.gbp.graph.nodes[pair]['belief'].values
+            else:
+                # for belief not gathered in gbp
+                pair_belief = 0
+                parents_of_pair = self.gbp.graph.get_supernode_of(pair)
+                assert len(parents_of_pair)==1
+                for p_node in parents_of_pair:
+                    to_marginal_idx = tuple(sorted(set(p_node) - set(pair)))
+                    p_belief = self.gbp.graph.nodes[p_node]['belief'].copy()
+                    p_belief.marginalize([str(i) for i in to_marginal_idx], inplace=True)
+                    p_belief.normalize(inplace=True)
+                    pair_belief += p_belief.values
 
-            binary_marginals[idx] = pair_belief / len(parents_of_pair)
-            
-    unary_marginals = binary2unary_marginals(model.binary_idx, binary_marginals, model.n)
-    
-    return (-kukuchi_energy, unary_marginals, binary_marginals)
+                binary_marginals[idx] = pair_belief / len(parents_of_pair)
+
+        unary_marginals = binary2unary_marginals(self.model.binary_idx, binary_marginals, self.model.n)
+
+        return (-kikuchi_energy, unary_marginals, binary_marginals)
+
+    def neg_free_energy(self):
+        self.model._init_disfactor()
+        self.model.attach_region_factors(self.gbp.graph)
+        kukuchi_energy = self.gbp.kikuchi_energy()
+        
+        energy = 0
+        graph = self.gbp.graph
+        for node in graph.nodes():
+            graph.nodes[node]['belief'].values = torch.clamp(graph.nodes[node]['belief'].values.detach(), min=1e-8)
+            energy += torch.sum(graph.nodes[node]['belief'].values * \
+                                (graph.nodes[node]['belief'].values.log() - \
+                                 graph.nodes[node]['log_phi'].values)) * \
+                                graph.nodes[node]['weight']
+
+        
+        return (-energy, 0, 0)
+
+        
+
 
 
 def mean_field_infer(ising, args):

@@ -149,7 +149,7 @@ def main(args, seed=3435, verbose=True):
     elif args.infer == 'dbp':
         inference_method = partial(bp_infer, ising=ising, args=args, solver='dampbp')
     elif args.infer == 'gbp':
-        inference_method = partial(p2cbp_infer, ising=ising, args=args, learn_model=True)
+        inference_method = p2cbp_infer(ising=ising, args=args)
     elif args.infer == 'bethe':
         inference_method = bethe_net_infer(ising=ising, args=args)        
     elif args.infer == 'kikuchi':
@@ -181,9 +181,16 @@ def main(args, seed=3435, verbose=True):
             log_Z_computer = partial(inference_method.neg_free_energy)
             # maybe, use the inferred marginals to get a partition function, unary, binary ---> bethe energy
             train_avg_nll = ising.trainer(train_data_loader, log_Z_computer, 20, optimizer, args.clip, args.agreement_pen, args.infer)
-        elif args.infer in ['ve', 'mf', 'lbp', 'dbp', 'gbp']:
+        elif args.infer in ['ve', 'mf', 'lbp', 'dbp']:
             # for mf, lbp, gbp cases
             train_avg_nll = ising.trainer(train_data_loader, inference_method, 20, optimizer, args.clip, args.agreement_pen, args.infer)
+        elif args.infer in ['gbp']:
+            ising._init_disfactor()
+            ising.attach_region_factors(ising.region_graph)
+            _ = inference_method()
+            log_Z_computer = partial(inference_method.neg_free_energy)
+            train_avg_nll = ising.trainer(train_data_loader, log_Z_computer, 20, optimizer, args.clip, args.agreement_pen, args.infer)
+
         
         time_end = time.time()
         test_avg_nll = ising.test_nll(test_data_loader, inference_method)
