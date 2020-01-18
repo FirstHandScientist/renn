@@ -150,6 +150,9 @@ class bethe_net_infer(torch.nn.Module):
             unary_marginals_enc = unary_marginals_enc_new.detach()
             binary_marginals_enc = binary_marginals_enc_new.detach()
 
+
+        self.unary_marginals_enc = unary_marginals_enc.detach()
+        self.binary_marginals_enc = binary_marginals_enc.detach()
         
         if not learn_model:
             log_Z_enc = -self.ising.bethe_energy(unary_marginals_enc, binary_marginals_enc)
@@ -159,6 +162,10 @@ class bethe_net_infer(torch.nn.Module):
             agreement_loss = self.encoder.agreement_penalty(self.ising.binary_idx, unary_marginals_enc, binary_marginals_enc)
 
             return (-bethe_enc, - agreement_loss, len(self.ising.binary_idx))
+    def neg_free_energy(self):
+        bethe_enc = self.ising.bethe_energy(self.unary_marginals_enc, self.binary_marginals_enc)
+        return -bethe_enc, 0, 0
+
 
 class kikuchi_net_infer(torch.nn.Module):
     def __init__(self, ising, args):

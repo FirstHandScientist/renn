@@ -151,9 +151,7 @@ def main(args, seed=3435, verbose=True):
     elif args.infer == 'gbp':
         inference_method = partial(p2cbp_infer, ising=ising, args=args, learn_model=True)
     elif args.infer == 'bethe':
-        inference_method_f = bethe_net_infer(ising=ising, args=args)
-        inference_method = partial(inference_method_f, learn_model=True)
-
+        inference_method = bethe_net_infer(ising=ising, args=args)        
     elif args.infer == 'kikuchi':
         inference_method = kikuchi_net_infer(ising=ising, args=args)
         
