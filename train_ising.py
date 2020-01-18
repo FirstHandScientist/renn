@@ -1,5 +1,6 @@
 import sys
 import os
+from parse import parse
 import argparse
 import json
 import random
@@ -57,6 +58,7 @@ parser.add_argument('--t2i_ratio', default=20, type=int, help='training to infer
 parser.add_argument('--sleep', default=1, type=int, help='sleep a time a beginning.')
 parser.add_argument('--device', default='cpu', type=str, help='which gpu to use')
 
+parser.add_argument('--task', default="log_msg/train_grid_score_n5_std0.1_pen0_algo.ve.txt", type=str, help='the task to carry on.')
 
 
 class IsingDataset(Dataset):
@@ -226,6 +228,12 @@ def main(args, seed=3435, verbose=True):
 if __name__ == '__main__':
     args = parser.parse_args()
     # run multiple number of experiments, and collect the stats of performance.
+    _, num_node, unary_std, penalty, algorithm = parse("{}_n{}_std{}_pen{}_algo.{}.txt", args.task)
+    args.n = int(num_node)
+    args.unary_std = float(unary_std)
+    args.agreement_pen = float(penalty)
+    args.infer = str(algorithm)
+
     time.sleep(np.random.randint(args.sleep))
     if args.device != 'cpu':
         args.device = torch.device('cuda:{}'.format(int(get_freer_gpu()) ))
