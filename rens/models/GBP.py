@@ -120,7 +120,7 @@ class parent2child_algo(object):
         assert belief.variables == self.graph.nodes[node]['log_phi'].variables
         belief.to_real()
         belief.normalize(inplace=True)
-        assert torch.isnan(belief.values).sum() == 0
+        # assert torch.isnan(belief.values).sum() == 0
 
 
         return belief
