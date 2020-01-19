@@ -47,7 +47,7 @@ parser.add_argument('--structure', default='grid', type=str, help='the graph typ
 parser.add_argument('--data_dir', default='data', type=str, help='dataset dir')
 parser.add_argument('--data_regain', action='store_true', help='if to regenerate dataset')
 parser.add_argument('--train_size', default=100, type=int, help='the size of training samples')
-parser.add_argument('--valid_size', default=50, type=int, help='the size of valid samples')
+parser.add_argument('--valid_size', default=100, type=int, help='the size of valid samples')
 parser.add_argument('--test_size', default=50, type=int, help='the size of testing samples')
 parser.add_argument('--batch_size', default=100, type=int, help='the size of batch samples')
 parser.add_argument('--train_iters', default=200, type=int, help='the number of iterations to train')
@@ -74,6 +74,21 @@ class IsingDataset(Dataset):
 
     def __len__(self):
         return self.len
+
+def sample_batch(sampler, size, batch_size=100):
+    """
+    Generating data by batch
+    """
+    assert size % batch_size == 0
+    data_set = []
+    logpx_set = []
+    for i in range(size // batch_size):
+        x_batch, logpx_batch = sampler(samples=batch_size)
+        data_set.append(x_batch)
+        logpx_set.append(logpx_batch)
+        print("Finish {} * {} / {}".format(i+1, batch_size, size))
+
+    return torch.cat(data_set, 0), torch.cat(logpx_set, 0)
     
 
 def generate_dataset(args):
@@ -87,11 +102,16 @@ def generate_dataset(args):
     dataset_dir = os.path.join(args.data_dir, args.structure + str(args.n) + \
                                'train' + str(args.train_size) + 'test' + str(args.test_size) + '.pkl')
     
+    sampler = partial(ising.sample)
+        
     if args.data_regain or not os.path.exists(dataset_dir):
         # generate all required datset
-        train_data = ising.sample(args.train_size)
-        valid_data = ising.sample(args.valid_size)
-        test_data = ising.sample(args.test_size)
+        print("Generate training dataset...")
+        train_data = sample_batch(sampler, args.train_size)
+        print("Generate valid dataset...")
+        valid_data = sample_batch(sampler, args.valid_size)
+        print("Generate testing dataset...")
+        test_data = sample_batch(sampler, args.test_size)
         data_dict = {'train': train_data, 'valid': valid_data, 'test': test_data}
         with open(dataset_dir, 'wb') as handle:
             pickle.dump(data_dict, handle)
