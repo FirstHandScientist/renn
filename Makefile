@@ -6,8 +6,8 @@ LOG=log
 TRAIN_LOG_MSG=tlog_msg
 TRAIN_LOG_NET=tlog_net
 GRID_N={5,10}
-UNARY_STD={0.1,1.0}
-PENALTY={1,5}
+UNARY_STD=0.1
+PENALTY={3,5,10}
 # STRUCTURE should be: grid | full_connected
 STRUCTURE=grid
 EXP=train_${STRUCTURE}
@@ -17,18 +17,19 @@ RESULTS=${EXP}_score
 DEVICE=cuda:0
 
 EXP_ITERS=20
-SLEEP=5
+
+SLEEP=15
 
 ALGORITHM_MSG={ve,mf,lbp,dbp,gbp}
 ALGORITHM_NET={bethe,kikuchi}
 
-
-TRAIN_ITERS=2
+LR=0.0005
+TRAIN_ITERS=50
 # data set
 DATA_DIR=data
-TRAIN_SIZE=100
-TEST_SIZE=100
-BATCH_SIZE=100
+TRAIN_SIZE=4000
+TEST_SIZE=1000
+BATCH_SIZE=500
 
 init:
 	mkdir -p ${LOG} ${TRAIN_LOG_MSG} ${TRAIN_LOG_NET} ${DATA_DIR}
@@ -42,15 +43,15 @@ ${LOG}/${RESULTS}%.txt: init
 
 # training with inference method
 
-ising_train: $(shell echo ${TRAIN_LOG_MSG}/${RESULTS}_n${GRID_N}_std${UNARY_STD}_pen0_algo.${ALGORITHM_MSG}.txt) $(shell echo ${TRAIN_LOG_NET}/${RESULTS}_n${GRID_N}_std${UNARY_STD}_pen${PENALTY}_algo.${ALGORITHM_NET}.txt)
+ising_train: $(shell echo ${TRAIN_LOG_NET}/${RESULTS}_n${GRID_N}_std${UNARY_STD}_pen${PENALTY}_algo.${ALGORITHM_NET}.txt) $(shell echo ${TRAIN_LOG_MSG}/${RESULTS}_n${GRID_N}_std${UNARY_STD}_pen0_algo.${ALGORITHM_MSG}.txt)
 
 # training with massage passing algorithms
 ${TRAIN_LOG_MSG}/${RESULTS}%.txt: init
-	${PYTHON} train_ising.py --structure ${STRUCTURE} --sleep ${SLEEP} --device ${DEVICE} --train_size ${TRAIN_SIZE} --test_size ${TEST_SIZE} --batch_size ${BATCH_SIZE} --train_iters ${TRAIN_ITERS} --task $@ > $@
+	${PYTHON} train_ising.py --structure ${STRUCTURE} --sleep ${SLEEP} --device ${DEVICE} --train_size ${TRAIN_SIZE} --test_size ${TEST_SIZE} --batch_size ${BATCH_SIZE} --train_iters ${TRAIN_ITERS} --lr ${LR} --task $@ > $@
 
 # training with renn or bethe inference net
 ${TRAIN_LOG_NET}/${RESULTS}%.txt: init
-	${PYTHON} train_ising.py --structure ${STRUCTURE} --sleep ${SLEEP} --device ${DEVICE} --train_size ${TRAIN_SIZE} --test_size ${TEST_SIZE} --batch_size ${BATCH_SIZE} --train_iters ${TRAIN_ITERS} --task $@ > $@
+	${PYTHON} train_ising.py --structure ${STRUCTURE} --sleep ${SLEEP} --device ${DEVICE} --train_size ${TRAIN_SIZE} --test_size ${TEST_SIZE} --batch_size ${BATCH_SIZE} --train_iters ${TRAIN_ITERS} --lr ${LR} --task $@ > $@
 
 
 .SECONDARY:
