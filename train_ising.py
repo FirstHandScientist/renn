@@ -99,7 +99,7 @@ def generate_dataset(args):
     if not os.path.exists(args.data_dir):
         os.makedirs(args.data_dir)
         
-    dataset_dir = os.path.join(args.data_dir, args.structure + str(args.n) + \
+    dataset_dir = os.path.join(args.data_dir, args.structure + str(args.n) + 'std' + str(args.unary_std) + \
                                'train' + str(args.train_size) + 'test' + str(args.test_size) + '.pkl')
     
     sampler = partial(ising.sample)
