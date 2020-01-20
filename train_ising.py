@@ -95,11 +95,11 @@ def generate_dataset(args):
     """
     Get the training, validate, and testing dataset
     """
-    ising = ising_models.Ising(args.n, args.unary_std)
+    ising = ising_models.Ising(args.n, args.unary_std, device=args.device, structure=args.structure)
     if not os.path.exists(args.data_dir):
         os.makedirs(args.data_dir)
         
-    dataset_dir = os.path.join(args.data_dir, args.structure + str(args.n) + \
+    dataset_dir = os.path.join(args.data_dir, args.structure + str(args.n) + 'std' + str(args.unary_std) + \
                                'train' + str(args.train_size) + 'test' + str(args.test_size) + '.pkl')
     
     sampler = partial(ising.sample)
