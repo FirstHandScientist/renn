@@ -95,7 +95,7 @@ def generate_dataset(args):
     """
     Get the training, validate, and testing dataset
     """
-    ising = ising_models.Ising(args.n, args.unary_std)
+    ising = ising_models.Ising(args.n, args.unary_std, device=args.device, structure=args.structure)
     if not os.path.exists(args.data_dir):
         os.makedirs(args.data_dir)
         
