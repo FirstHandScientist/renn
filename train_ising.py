@@ -75,18 +75,38 @@ class IsingDataset(Dataset):
     def __len__(self):
         return self.len
 
-def sample_batch(sampler, size, batch_size=100):
+def sample_batch(sampler, size, batch_size=100, data_dir='data'):
     """
     Generating data by batch
     """
     assert size % batch_size == 0
     data_set = []
     logpx_set = []
+    tmp_file_dir = os.path.join(data_dir,'tmp')
+    if not os.path.exists(tmp_file_dir):
+        os.mkdir(tmp_file_dir)
+
+    tmp_files = []
     for i in range(size // batch_size):
         x_batch, logpx_batch = sampler(samples=batch_size)
-        data_set.append(x_batch)
-        logpx_set.append(logpx_batch)
+        batch_file_name = os.path.join(tmp_file_dir, 'batch{}.pkl'.format(i+1))
+        with open(batch_file_name, 'wb') as handle:
+            pickle.dump([x_batch, logpx_batch], handle)
+
+        tmp_files.append(batch_file_name)
         print("Finish {} * {} / {}".format(i+1, batch_size, size))
+        x_batch = None
+        logpx_batch = None
+
+
+    # load tmp files from disk
+    for batch_file in tmp_files:
+        with open(batch_file, 'rb') as handle:
+            batch_x_p = pickle.load(handle)
+
+        data_set.append(batch_x_p[0])
+        logpx_set.append(batch_x_p[1])
+        os.remove(batch_file)
 
     return torch.cat(data_set, 0), torch.cat(logpx_set, 0)
     
@@ -107,11 +127,11 @@ def generate_dataset(args):
     if args.data_regain or not os.path.exists(dataset_dir):
         # generate all required datset
         print("Generate training dataset...")
-        train_data = sample_batch(sampler, args.train_size)
+        train_data = sample_batch(sampler, args.train_size, 100, args.data_dir)
         print("Generate valid dataset...")
-        valid_data = sample_batch(sampler, args.valid_size)
+        valid_data = sample_batch(sampler, args.valid_size, 100, args.data_dir)
         print("Generate testing dataset...")
-        test_data = sample_batch(sampler, args.test_size)
+        test_data = sample_batch(sampler, args.test_size, 100, args.data_dir)
         data_dict = {'train': train_data, 'valid': valid_data, 'test': test_data}
         with open(dataset_dir, 'wb') as handle:
             pickle.dump(data_dict, handle)
