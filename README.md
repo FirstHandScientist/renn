@@ -40,6 +40,6 @@ make ising_train
 To compare train MRF of a complete graph:
 
 ``` bash
-make ising_train
+make -f completeMakefile ising_train
 
 ```
