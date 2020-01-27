@@ -107,7 +107,8 @@ def run_marginal_exp(args, seed=3435, verbose=True):
     # Generalized belief propagation
     if 'gbp' in args.method:
         time_start = time.time()
-        mrgnl_gbp = p2cbp_infer(ising, args)
+        gbp_infer = p2cbp_infer(ising, args)
+        mrgnl_gbp = gbp_infer()
         scores_gbp = p_get_scores(test_ub=(mrgnl_gbp[1].to(unary_marginals), mrgnl_gbp[2].to(unary_marginals)))
         time_end = time.time()
         all_scores['gbp'] = {'l1': scores_gbp[0], 'corr': scores_gbp[1], \
