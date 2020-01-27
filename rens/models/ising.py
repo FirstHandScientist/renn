@@ -1,4 +1,6 @@
 import os
+import sys
+import itertools
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -12,6 +14,8 @@ from rens.graphs import PTDiscreteFactor
 from rens.utils.spanning_tree import edge_appear_rate
 from rens.utils.utils import get_binary_marginals_of_region_graph
 from rens.utils.utils import binary2unary_marginals
+from rens.utils.utils import clip_optimizer_params
+from rens.models.inference_ising import kikuchi_net_infer, bethe_net_infer, mean_field_infer, p2cbp_infer, bp_infer
 
 def logadd(x, y):
     d = torch.max(x,y)  
@@ -153,6 +157,7 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
         """Compute the Kikuchi free energy"""
         energy = 0
         for node in graph.nodes():
+            graph.nodes[node][self.belief_name].values = torch.clamp(graph.nodes[node][self.belief_name].values, min=1e-8)
             energy += torch.sum(graph.nodes[node][self.belief_name].values * \
                        (graph.nodes[node][self.belief_name].values.log() - \
                         graph.nodes[node]['log_phi'].values.detach())) * \
@@ -453,7 +458,10 @@ class Ising(nn.Module):
             return regions
         elif self.structure == 'full_connected':
             region = set()
-            for comb in itertools.combinations(range(n**2), 3):
+            root = [0]
+            rests = range(1, n**2)
+            for pair in itertools.combinations(rests, 2):
+                comb = root + list(pair)
                 region.add(tuple(sorted(list(comb))))
             return region
 
@@ -531,26 +539,33 @@ class Ising(nn.Module):
         # calculate log partition of an ising model via variable elimination
         # unary : n**2 of unary log potentials
         # binary: n**2 x n**2 edge log potentials
-        if order is None:
-            order = list(range(self.n**2))
-        n = self.n
-        binary = self.binary*self.mask
-        unary = self.unary
-        factors = []
-        for i in range(n**2):
-            unary_factor = torch.stack([-unary[i], unary[i]], 0)
-            factors.append([[i], unary_factor])
-        for i in range(n**2):
-            for j in range(i+1, n **2):                        
-                if (i + 1 == j and (i+1) % n != 0) or (j - i == n and i < n**2 - 1):
-                    binary_factor = torch.stack([binary[i][j], -binary[i][j]], 0)
-                    binary_factor = torch.stack([binary_factor, -binary_factor], 1)
-                    factors.append([[i, j], binary_factor])
-        assert(len(factors) == n**2 + 2*n*(n-1))
-        self.new_factors = []
-        for i in order:
-            factors = self.sum_factor(factors, i)
-        log_Z = factors[0][-1]
+        if self.structure == 'grid':
+            if order is None:
+                order = list(range(self.n**2))
+            n = self.n
+            binary = self.binary*self.mask
+            unary = self.unary
+            factors = []
+            for i in range(n**2):
+                unary_factor = torch.stack([-unary[i], unary[i]], 0)
+                factors.append([[i], unary_factor])
+            for i in range(n**2):
+                for j in range(i+1, n **2):                        
+                    if (i + 1 == j and (i+1) % n != 0) or (j - i == n and i < n**2 - 1):
+                        binary_factor = torch.stack([binary[i][j], -binary[i][j]], 0)
+                        binary_factor = torch.stack([binary_factor, -binary_factor], 1)
+                        factors.append([[i, j], binary_factor])
+            assert(len(factors) == n**2 + 2*n*(n-1))
+            self.new_factors = []
+            for i in order:
+                factors = self.sum_factor(factors, i)
+            log_Z = factors[0][-1]
+        else:
+            allx_iterater = itertools.product([-1,1], repeat=self.n**2)
+            all_logpx = [self.log_energy(torch.FloatTensor(list(x)).unsqueeze(0).to(self.device)) for x in allx_iterater]
+            all_logpx = torch.cat(all_logpx, 0)
+            log_Z = torch.exp(all_logpx).sum().log()
+        
         return log_Z
     
     def log_partition_lbp(self):
@@ -928,6 +943,10 @@ class Ising(nn.Module):
         
         
     def bethe_energy(self, unary_marginals, binary_marginals):
+        # in case there are close to zero probability
+        unary_marginals = torch.clamp(unary_marginals, min=1e-8)
+        binary_marginals = torch.clamp(binary_marginals, min=1e-8)
+        
         binary = self.binary*self.mask
         unary = self.unary
         unary1 = self.unary
@@ -955,7 +974,7 @@ class Ising(nn.Module):
             bethe += binary_factor_ij.sum()
         return bethe
 
-    def trainer(self, dataloader, infer_method, num_epoch, optimizer):
+    def trainer(self, dataloader, infer_method, num_epoch, optimizer, max_norm, agg_pen, infer_name):
         """
         Do the learning of ising model with given dataset, and inference method.
         """
@@ -964,15 +983,26 @@ class Ising(nn.Module):
             for i_batch, batch in enumerate(dataloader):
                 optimizer.zero_grad()
                 loss = - self.log_energy(batch)
-                log_Z = infer_method()
-                if isinstance(log_Z, tuple):
-                    log_Z = log_Z[0]
+                if infer_name in ['mf', 'lbp', 'dbp']:
+                    log_Z, _, _ = infer_method()
+                    
+                elif infer_name in ['kikuchi', 'bethe', 'gbp']:
+                    neg_free_energy, consist_error, match_node_num = infer_method()
+                    log_Z = neg_free_energy + consist_error * agg_pen
+                    
+                elif infer_name in ['ve']:
+                    log_Z = infer_method()
+               
+                else:
+                    print('The inference method {} is not supported.'.format(infer_name))
+                    sys.exit(1)
                     
                 loss += log_Z
                 loss = loss.sum() / batch.size(0)
                 loss.backward()
                 train_nll += loss.detach() * batch.size(0)
                 optimizer.step()
+                clip_optimizer_params(optimizer, max_norm)
                 
         return train_nll / dataloader.dataset.len
     

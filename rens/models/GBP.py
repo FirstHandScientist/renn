@@ -91,6 +91,7 @@ class parent2child_algo(object):
         energy = 0
         graph = self.graph
         for node in graph.nodes():
+            graph.nodes[node]['belief'].values = torch.clamp(graph.nodes[node]['belief'].values, min=1e-8)
             energy += torch.sum(graph.nodes[node]['belief'].values * \
                        (graph.nodes[node]['belief'].values.log() - \
                         graph.nodes[node]['log_phi'].values.detach())) * \
@@ -119,6 +120,8 @@ class parent2child_algo(object):
         assert belief.variables == self.graph.nodes[node]['log_phi'].variables
         belief.to_real()
         belief.normalize(inplace=True)
+        # assert torch.isnan(belief.values).sum() == 0
+
 
         return belief
 
