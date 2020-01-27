@@ -1,6 +1,10 @@
 import numpy as np
 import torch
 import os
+from torch.utils.data import Dataset
+from rens.models import ising as ising_models
+from functools import partial
+import pickle
 
 def corr(t1, t2):
     if t1.device.type == 'cpu':

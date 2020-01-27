@@ -18,7 +18,6 @@ import pandas as pd
 from torch.nn.init import xavier_uniform_
 from functools import partial
 from torch.utils.data import DataLoader
-from torch.utils.data import Dataset
 from rens.models import ising as ising_models
 from rens.utils.utils import corr, l2, l1, get_scores, binary2unary_marginals
 from rens.utils.utils import clip_optimizer_params, get_freer_gpu
