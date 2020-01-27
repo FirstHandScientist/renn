@@ -23,7 +23,7 @@ from rens.models import ising as ising_models
 from rens.utils.utils import corr, l2, l1, get_scores, binary2unary_marginals
 from rens.utils.utils import clip_optimizer_params, get_freer_gpu
 from rens.models.inference_ising import bp_infer, p2cbp_infer, mean_field_infer, bethe_net_infer, kikuchi_net_infer
-
+from rens.utils.utils import generate_dataset
 # Model options
 parser = argparse.ArgumentParser()
 parser.add_argument('--n', default=5, type=int, help="ising grid size")
@@ -59,97 +59,6 @@ parser.add_argument('--sleep', default=1, type=int, help='sleep a time a beginni
 parser.add_argument('--device', default='cpu', type=str, help='which gpu to use')
 
 parser.add_argument('--task', default="log_msg/train_grid_score_n5_std0.1_pen0_algo.ve.txt", type=str, help='the task to carry on.')
-
-
-class IsingDataset(Dataset):
-    """Wrapper for Ising dataset"""
-    def __init__(self, dataset, device='cpu'):
-
-        self.len = dataset.size(0)
-        self.dataset = dataset.to(device)
-        self.device = device
-
-    def __getitem__(self, index):
-        return self.dataset[index]
-
-    def __len__(self):
-        return self.len
-
-def sample_batch(sampler, size, batch_size=100, data_dir='data'):
-    """
-    Generating data by batch
-    """
-    assert size % batch_size == 0
-    data_set = []
-    logpx_set = []
-    tmp_file_dir = os.path.join(data_dir,'tmp')
-    if not os.path.exists(tmp_file_dir):
-        os.mkdir(tmp_file_dir)
-
-    tmp_files = []
-    for i in range(size // batch_size):
-        x_batch, logpx_batch = sampler(samples=batch_size)
-        batch_file_name = os.path.join(tmp_file_dir, 'batch{}.pkl'.format(i+1))
-        with open(batch_file_name, 'wb') as handle:
-            pickle.dump([x_batch, logpx_batch], handle)
-
-        tmp_files.append(batch_file_name)
-        print("Finish {} * {} / {}".format(i+1, batch_size, size))
-        x_batch = None
-        logpx_batch = None
-
-
-    # load tmp files from disk
-    for batch_file in tmp_files:
-        with open(batch_file, 'rb') as handle:
-            batch_x_p = pickle.load(handle)
-
-        data_set.append(batch_x_p[0])
-        logpx_set.append(batch_x_p[1])
-        os.remove(batch_file)
-
-    return torch.cat(data_set, 0), torch.cat(logpx_set, 0)
-    
-
-def generate_dataset(args):
-    """
-    Get the training, validate, and testing dataset
-    """
-    ising = ising_models.Ising(args.n, args.unary_std, device=args.device, structure=args.structure)
-    if not os.path.exists(args.data_dir):
-        os.makedirs(args.data_dir)
-        
-    dataset_dir = os.path.join(args.data_dir, args.structure + str(args.n) + 'std' + str(args.unary_std) + \
-                               'train' + str(args.train_size) + 'test' + str(args.test_size) + '.pkl')
-    
-    sampler = partial(ising.sample)
-        
-    if args.data_regain or not os.path.exists(dataset_dir):
-        # generate all required datset
-        print("Generate training dataset...")
-        train_data = sample_batch(sampler, args.train_size, 100, args.data_dir)
-        print("Generate valid dataset...")
-        valid_data = sample_batch(sampler, args.valid_size, 100, args.data_dir)
-        print("Generate testing dataset...")
-        test_data = sample_batch(sampler, args.test_size, 100, args.data_dir)
-        data_dict = {'train': train_data, 'valid': valid_data, 'test': test_data}
-        with open(dataset_dir, 'wb') as handle:
-            pickle.dump(data_dict, handle)
-        
-    else:
-        # load dataset
-        with open(dataset_dir, 'rb') as handle:
-            data_dict = pickle.load(handle)
-
-    
-    args.dataset = {'train': IsingDataset(data_dict['train'][0], args.device),\
-                    'valid': IsingDataset(data_dict['valid'][0], args.device), \
-                    'test': IsingDataset(data_dict['test'][0], args.device)}
-    args.true_nll = {'train': - torch.mean(data_dict['train'][1]), \
-                     'valid': - torch.mean(data_dict['valid'][1]), \
-                     'test': - torch.mean(data_dict['test'][1])}
-    return args
-    
 
     
 
