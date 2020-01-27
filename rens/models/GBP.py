@@ -1,5 +1,5 @@
 import torch
-from pgmpy.factors.discrete import PTDiscreteFactor
+from rens.graphs import PTDiscreteFactor
 import numpy
 from random import shuffle
 

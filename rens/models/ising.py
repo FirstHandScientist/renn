@@ -7,8 +7,8 @@ import numpy as np
 import math
 import pickle
 import networkx as nx
-from pgmpy.models import RegionGraph
-from pgmpy.factors.discrete import PTDiscreteFactor
+from rens.graphs import RegionGraph
+from rens.graphs import PTDiscreteFactor
 from rens.utils.spanning_tree import edge_appear_rate
 from rens.utils.utils import get_binary_marginals_of_region_graph
 from rens.utils.utils import binary2unary_marginals
