@@ -1,25 +1,45 @@
-# ToDo
-    -[ ] linear response for adjustment of alpha-values in alpha-BP
-    -[ ] EP net minimization ??
-    
+# Environment Setup
+Create a virtual environment with a python2 interpreter at 'path/to/your/evn/'
+```bash
+$ virtualenv -p python3.6 pyenv
+```
+Then activate your environment:
 
-# experiment example
-To compare marginals for a 10x10 Ising model averaged across 5 iterations:
+``` bash
+$ source pyenv/bin/activate
 ```
-python infer_ising_marginals.py --gpu 0 --n 10 --exp_iters 5
-```
+and install the requirement file:
 
-To train the RBM with amortized BFE, run:
-```
-python rbm.py -cuda -epochs 40 -ilr 0.003 -log_interval 200 -lr 0.001 -optalg adam -pen_mult 1.5 -q_hid_size 150 -q_layers 5 -qemb_sz 200 -seed 72831 -save rbm-model.pt
-```
+``` bash
+$ pip install -r requirements.txt
 
-To run AIS:
-```
-python rbm.py -cuda -train_from rbm-model.pt
 ```
 
-To train the undirected HMM variant with amortized BFE, run:
+``` bash
+$ python setup.py develop
+
 ```
-python pen_uhmm.py -cuda -K 30 -bsz 32 -dropout 0.3 -ilr 0.0003 -infarch rnnnode -init 0.001 -just_diff -lemb_size 64 -log_interval 500 -loss alt3 -lr 0.0001 -markov_order 3 -max_len 30 -not_inf_residual -optalg adam -pen_mult 1 -pendecay 1 -penfunc kl2 -q_hid_size 100 -q_layers 1 -qemb_size 150 -qinit 0.001 -seed 48047 -t_hid_size 100 -vemb_size 64 -wemb_size 100 -epochs 10
+# experiment examples
+To compare marginals for on grid graphs:
+```
+make ising_infer
+```
+
+To compare marginals for on complete graphs:
+```
+make -f completeMakefile ising_infer
+```
+
+To compare train a MRF of a grid graph:
+
+``` bash
+make ising_train
+
+```
+
+To compare train MRF of a complete graph:
+
+``` bash
+make ising_train
+
 ```
