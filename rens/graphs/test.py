@@ -1,7 +1,7 @@
 import torch
 import numpy as np
 from pgmpy.factors.discrete import DiscreteFactor
-from pgmpy.factors.discrete import PTDiscreteFactor
+from rens.graphs import PTDiscreteFactor
 
 def test_sum():
     print("Testing sum PT factors..")
