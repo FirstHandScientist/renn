@@ -24,7 +24,7 @@ setup(
     zip_safe=False,
     name='rens',
     version='0.1.0',
-    author_email='doli@kth.se',
+    author_email='',
     description="Inference tool box",
     url='',
     license='',
