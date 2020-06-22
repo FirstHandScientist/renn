@@ -1,3 +1,4 @@
+# some functions/ classes such as Ising model and TransformerInferenceNetwork are adapted from repos https://github.com/swiseman/bethe-min 
 import os
 import sys
 import itertools
