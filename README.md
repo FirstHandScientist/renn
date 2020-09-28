@@ -2,7 +2,7 @@
 [Region-based Energy Neural Network for Approximate Inference](https://arxiv.org/abs/2006.09927)
 
 # Environment Setup
-Create a virtual environment with a python2 interpreter at 'path/to/your/evn/'
+Create a virtual environment with a python3 interpreter at 'path/to/your/evn/'
 ```bash
 $ virtualenv -p python3.6 pyenv
 ```
