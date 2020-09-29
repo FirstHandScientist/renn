@@ -3,6 +3,7 @@ PYTHON=pyenv/bin/python
 
 # global variable for directories
 LOG=log
+ARCH_LOG=${LOG}/arch
 TRAIN_LOG_MSG=tlog_msg
 TRAIN_LOG_NET=tlog_net
 GRID_N={5,10}
@@ -30,16 +31,30 @@ DATA_DIR=data
 TRAIN_SIZE=4000
 TEST_SIZE=1000
 BATCH_SIZE=500
+# architecture setting
+ARCH={att0mlp0,att1mlp2}
+
+
+
+test:
+	echo ${ARCH_LOG}/${RESULTS}_n${GRID_N}_std${UNARY_STD}_pen${PENALTY}.txt
+	echo ${A}
 
 init:
-	mkdir -p ${LOG} ${TRAIN_LOG_MSG} ${TRAIN_LOG_NET} ${DATA_DIR}
+	mkdir -p ${LOG} ${ARCH_LOG} ${TRAIN_LOG_MSG} ${TRAIN_LOG_NET} ${DATA_DIR}
 
+# inference banchmarks
 ising_infer: $(shell echo ${LOG}/${RESULTS}_n${GRID_N}_std${UNARY_STD}_pen${PENALTY}.txt)
 
 
 ${LOG}/${RESULTS}%.txt: init
 	${PYTHON} infer_ising_marginals.py --structure ${STRUCTURE} --sleep ${SLEEP} --device ${DEVICE} --exp_iters ${EXP_ITERS} --task $@ > $@	
 
+# architecture comparisons
+net_arch: $(shell echo ${ARCH_LOG}/${RESULTS}_n${GRID_N}_std${UNARY_STD}_pen${PENALTY}.txt,${ARCH})
+
+${ARCH_LOG}/${RESULTS}%: init
+	${PYTHON} infer_ising_marginals.py --structure ${STRUCTURE} --sleep ${SLEEP} --device ${DEVICE} --exp_iters ${EXP_ITERS} --net $(shell cut -d',' -f2 <<<$@) --task $(shell cut -d',' -f1 <<<$@) > $(shell cut -d',' -f1 <<<$@).$(shell cut -d',' -f2 <<<$@)
 
 # training with inference method
 
