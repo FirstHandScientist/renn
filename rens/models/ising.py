@@ -71,7 +71,7 @@ class TransformerInferenceNetwork(nn.Module):
         self.device = 'cpu'
         self.node_emb = nn.Parameter(torch.randn(1, n**2, state_dim))
         if num_layers['att'] == 0 and num_layers['mlp']==0:
-            self.para_emb = nn.Parameter(torch.randn(n**2, mlp_out_dim))
+            self.para_emb = nn.Parameter(torch.randn(n**2 * 10, mlp_out_dim))
         else:
             self.attn_layers = nn.ModuleList([SelfAttention(state_dim) for _ in range(num_layers['att'])]) if num_layers['att'] > 0 else None
             local_times = int(math.log(mlp_out_dim,2))
