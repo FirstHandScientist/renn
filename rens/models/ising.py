@@ -65,20 +65,24 @@ class SelfAttention(nn.Module):
         return out
 
 class TransformerInferenceNetwork(nn.Module):
-    def __init__(self, n, state_dim = 100, num_layers = 1, mlp_out_dim=4):
+    def __init__(self, n, state_dim = 100, num_layers = {'att': 1, 'mlp': 1}, mlp_out_dim=4):
         super(TransformerInferenceNetwork, self).__init__()
         self.n = n
         self.device = 'cpu'
         self.node_emb = nn.Parameter(torch.randn(1, n**2, state_dim))
-        self.attn_layers = nn.ModuleList([SelfAttention(state_dim) for _ in range(num_layers)])
-        local_times = int(math.log(mlp_out_dim,2))
-        self.mlp = nn.Sequential(ResidualLayer(state_dim*local_times, state_dim*local_times), 
-                                 ResidualLayer(state_dim*local_times, state_dim*local_times), 
-                                 nn.Linear(state_dim*local_times, mlp_out_dim))
+        if num_layers['att'] == 0 and num_layers['mlp']==0:
+            self.para_emb = nn.Parameter(torch.randn(n**2, mlp_out_dim))
+        else:
+            self.attn_layers = nn.ModuleList([SelfAttention(state_dim) for _ in range(num_layers['att'])]) if num_layers['att'] > 0 else None
+            local_times = int(math.log(mlp_out_dim,2))
+            residualList = [ResidualLayer(state_dim*local_times, state_dim*local_times) for _ in range(num_layers['mlp'])]
+            mlpList = residualList + [nn.Linear(state_dim*local_times, mlp_out_dim) ]
+            self.mlp = nn.Sequential(*mlpList)
+            
         self.num_layers = num_layers
         self.mask = torch.zeros(n**2, n**2).fill_(0)
-        self.binary_mlp = nn.Sequential(ResidualLayer(state_dim, state_dim),
-                                 nn.Linear(state_dim, 1))
+        # self.binary_mlp = nn.Sequential(ResidualLayer(state_dim, state_dim),
+        #                          nn.Linear(state_dim, 1))
         self.state_dim = state_dim
         for i in range(n**2):
             for j in range(i+1, n **2):                        
@@ -91,7 +95,7 @@ class TransformerInferenceNetwork(nn.Module):
 
     def forward(self, binary_idx, unary = None, binary = None):
         x = self.node_emb
-        for l in range(self.num_layers):
+        for l in range(self.num_layers['att']):
             x = self.attn_layers[l](x, self.mask) # 1 x n**2 x state_dim
 
         # here output of attn_layers is embedding vector e
@@ -133,18 +137,23 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
         if not hasattr(self, 'belief_name'):
             self.belief_name = 'net_belief'
         region_idx = graph.region_layers["R0"]
-        x = self.node_emb
-        for l in range(self.num_layers):
-            x = self.attn_layers[l](x, self.mask) # 1 x n**2 x state_dim
+        if hasattr(self, 'para_emb'):
+            # the direct parameter case without using network
+            region_logits = self.para_emb[:len(region_idx)]
+        else:
+            x = self.node_emb
+            for l in range(self.num_layers['att']):
+                x = self.attn_layers[l](x, self.mask) # 1 x n**2 x state_dim
 
-        # here output of attn_layers is embedding vector e
-        region_features = []
-        for region in region_idx:
-            emb_rg = torch.cat([x[0][i] for i in region], 0) # state_dim*2            
-            region_features.append(emb_rg)
-            
-        region_features = torch.stack(region_features, 0) # |R0| x state_dim*2        
-        region_logits = self.mlp(region_features) 
+            # here output of attn_layers is embedding vector e
+            region_features = []
+            for region in region_idx:
+                emb_rg = torch.cat([x[0][i] for i in region], 0) # state_dim*2            
+                region_features.append(emb_rg)
+
+            region_features = torch.stack(region_features, 0) # |R0| x state_dim*2
+            region_logits = self.mlp(region_features) 
+        
         # region_logits = [h_1, h_2, ... h_n2]
         region_prob = F.softmax(region_logits, dim = 1)
         output_shape = [len(region_idx)] + [2] * graph.r0_elmt_size

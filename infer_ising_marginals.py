@@ -41,6 +41,11 @@ parser.add_argument('--unary_std', default=1.0, type=float, help='')
 
 parser.add_argument('--task', default="infer_result_n5_std1.0.txt", type=str, help='the task to carry on.')
 parser.add_argument('--sleep', default=1, type=int, help='sleep a time a beginning.')
+parser.add_argument('--net', default="att1mlp2", type=str, help='the specification of RENN neural network structure:\
+att0mlp0: embedding + softmax only, the simplest case of structure; \
+att1mlp1: embedding + att * 1 + mlp (residual * 1) + softmax; \
+att1mlp2: embedding + att * 1 + mlp (residual * 2) + softmax; \
+')
 
 
     
@@ -158,9 +163,14 @@ if __name__ == '__main__':
     args.n = int(num_node)
     args.unary_std = float(unary_std)
     args.agreement_pen = float(penalty)
-    
+    # parsing the network structure
+    att_num_layers, rl_num_layers = parse('att{}mlp{}', args.net)
+    args.num_layers = {'att': int(att_num_layers), 'mlp': int(rl_num_layers) }
+    assert int(att_num_layers) >= 0 and int(rl_num_layers) >= 0, 'layer number should be positive integer.'
 
     args.method = ['mf','bp', 'dbp','gbp','bethe', 'kikuchi']
+    args.method = ['kikuchi']
+    
     
     time.sleep(np.random.randint(args.sleep))
     if args.device != 'cpu':
