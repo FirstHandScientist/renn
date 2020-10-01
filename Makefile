@@ -7,7 +7,8 @@ ARCH_LOG=${LOG}/arch
 TRAIN_LOG_MSG=tlog_msg
 TRAIN_LOG_NET=tlog_net
 GRID_N={5,10}
-UNARY_STD=0.1
+UNARY_STD=1
+MRF_PARA=G1
 PENALTY={3,5,10}
 # STRUCTURE should be: grid | full_connected
 STRUCTURE=grid
@@ -37,14 +38,14 @@ ARCH={att0mlp0,att1mlp2}
 
 
 test:
-	echo ${ARCH_LOG}/${RESULTS}_n${GRID_N}_std${UNARY_STD}_pen${PENALTY}.txt
+	echo ${ARCH_LOG}/${RESULTS}_n${GRID_N}_${MRF_PARA}_std${UNARY_STD}_pen${PENALTY}.txt
 	echo ${A}
 
 init:
 	mkdir -p ${LOG} ${ARCH_LOG} ${TRAIN_LOG_MSG} ${TRAIN_LOG_NET} ${DATA_DIR}
 
 # inference banchmarks
-ising_infer: $(shell echo ${LOG}/${RESULTS}_n${GRID_N}_std${UNARY_STD}_pen${PENALTY}.txt)
+ising_infer: $(shell echo ${LOG}/${RESULTS}_n${GRID_N}_${MRF_PARA}_std${UNARY_STD}_pen${PENALTY}.txt)
 
 
 ${LOG}/${RESULTS}%.txt: init

@@ -66,7 +66,7 @@ def main(args, seed=3435, verbose=True):
     np.random.seed(seed)
     torch.manual_seed(seed)
     
-    ising = ising_models.Ising(n=args.n, unary_std=args.unary_std, device=args.device, structure=args.structure)
+    ising = ising_models.Ising(n=args.n, mrf_para=args.mrf_para, unary_std=args.unary_std, device=args.device, structure=args.structure)
     
 
     
@@ -176,11 +176,14 @@ def main(args, seed=3435, verbose=True):
 if __name__ == '__main__':
     args = parser.parse_args()
     # run multiple number of experiments, and collect the stats of performance.
-    _, num_node, unary_std, penalty, algorithm = parse("{}score_n{}_std{}_pen{}_algo.{}.txt", args.task)
+    _, num_node, mrf_para, unary_std, penalty, algorithm = parse("{}score_n{}_{}_std{}_pen{}_algo.{}.txt", args.task)
     args.n = int(num_node)
     args.unary_std = float(unary_std)
     args.agreement_pen = float(penalty)
     args.infer = str(algorithm)
+    args.mrf_para = mrf_para
+    assert (args.mrf_para.startswith('G') or args.mrf_para.startswith('U')) \
+        and float(args.mrf_para[1:])>0 , 'Un-supported distribution to sample for potential factors.'
 
     time.sleep(np.random.randint(args.sleep))
     if args.device != 'cpu':
