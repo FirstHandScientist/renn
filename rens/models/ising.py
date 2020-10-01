@@ -278,13 +278,22 @@ class GeneralizedInferenceNetwork(TransformerInferenceNetwork):
 
 
 class Ising(nn.Module):
-    def __init__(self, n, unary_std, device='cpu', structure='grid'):
+    def __init__(self, n, mrf_para, unary_std, device='cpu', structure='grid'):
         super(Ising, self).__init__()
         self.n = n
         self.structure = structure
         self.device = device
-        self.unary = nn.Parameter(torch.randn(n**2) * unary_std)
-        self.binary = nn.Parameter(torch.randn(n**2, n**2))
+        if mrf_para.startswith('G'): # sample from Gaussian
+            self.unary = nn.Parameter(torch.randn(n**2) * unary_std)
+            self.binary = nn.Parameter(torch.randn(n**2, n**2))
+        elif mrf_para.startswith('U'): # sample from Uniform
+            r2  = float(mrf_para[1:])
+            r1  = - r2
+            u1, u2 = - unary_std, unary_std
+            self.unary = nn.Parameter((u1-u2)*torch.randn(n**2) + u2)
+            self.binary = nn.Parameter((r1-r2)*torch.rand(n**2, n**2) + r2)
+
+            
         self.alpha_wgt = nn.Parameter(torch.randn(n**2, n**2) * 0.0 + 0.9)
         self.mask = self.binary_mask(n)
         self.binary_idx = []

@@ -38,6 +38,8 @@ parser.add_argument('--seed', default=3435, type=int, help='random seed')
 parser.add_argument('--optmz_alpha', action='store_true', help='whether to optimize alphas in alpha bp')
 parser.add_argument('--damp', default=0.5, type=float, help='')
 parser.add_argument('--unary_std', default=1.0, type=float, help='')
+parser.add_argument('--mrf_para', default='G1.0', type=str, help='define how to sample the coupling. Default: G1=Gussian(0,1), UW=Uniform(-W, W)')
+
 
 parser.add_argument('--task', default="infer_result_n5_std1.0.txt", type=str, help='the task to carry on.')
 parser.add_argument('--sleep', default=1, type=int, help='sleep a time a beginning.')
@@ -55,7 +57,7 @@ def run_marginal_exp(args, seed=3435, verbose=True):
     np.random.seed(seed)
     torch.manual_seed(seed)
     
-    ising = ising_models.Ising(args.n, args.unary_std, args.device, args.structure)
+    ising = ising_models.Ising(args.n, args.mrf_para, args.unary_std, args.device, args.structure)
     ising.push2device(args.device)
 
     log_Z = ising.log_partition_ve()
@@ -159,7 +161,7 @@ if __name__ == '__main__':
     # run multiple number of experiments, and collect the stats of performance.
     # args.method = ['mf', 'bp', 'gbp', 'bethe', 'kikuchi']
     # parsing the task first
-    _, num_node, unary_std, penalty = parse("{}_n{}_std{}_pen{}.txt", args.task)
+    _, num_node, mrf_para, unary_std, penalty = parse("{}_n{}_{}_std{}_pen{}.txt", args.task)
     args.n = int(num_node)
     args.unary_std = float(unary_std)
     args.agreement_pen = float(penalty)
@@ -167,9 +169,14 @@ if __name__ == '__main__':
     att_num_layers, rl_num_layers = parse('att{}mlp{}', args.net)
     args.num_layers = {'att': int(att_num_layers), 'mlp': int(rl_num_layers) }
     assert int(att_num_layers) >= 0 and int(rl_num_layers) >= 0, 'layer number should be positive integer.'
+    # parsing the way to sample MRFs
+    args.mrf_para = mrf_para
+    assert (args.mrf_para.startswith('G') or args.mrf_para.startswith('U')) \
+        and float(args.mrf_para[1:])>0 , 'Un-supported distribution to sample for potential factors.'
 
+    # testing algorithms
     args.method = ['mf','bp', 'dbp','gbp','bethe', 'kikuchi']
-    args.method = ['kikuchi']
+    args.method = ['bethe','kikuchi']
     
     
     time.sleep(np.random.randint(args.sleep))
