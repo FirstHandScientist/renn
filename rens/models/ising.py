@@ -945,9 +945,10 @@ class Ising(nn.Module):
         unary_marginals1 = unary_marginals
         unary_marginals0 = 1 - unary_marginals
         unary_beliefs = torch.stack([unary_marginals0, unary_marginals1], 1) # 100 x 2
-        # entropy and unary part of average energy
-        bethe_unary = (unary_marginals0.log() - unary0)*unary_marginals0 + \
-            (unary_marginals1.log() - unary1)*unary_marginals1
+        # entropy and unary part of average energy 
+        # patch for safe log computation, to avoid inf avalues
+        bethe_unary = (unary_marginals0.log().clamp(min=-1/self.EPS) - unary0)*unary_marginals0 + \
+            (unary_marginals1.log().clamp(min=-1/self.EPS) - unary1)*unary_marginals1
         free_energy = bethe_unary.sum()
         # include the binary part of free energy
         for k, (i,j) in enumerate(self.binary_idx):
@@ -974,8 +975,8 @@ class Ising(nn.Module):
         unary_marginals1 = unary_marginals
         unary_marginals0 = 1 - unary_marginals
         # why the minus unary here ???
-        bethe_unary = (unary_marginals0.log() - unary0)*unary_marginals0 + (
-            unary_marginals1.log() - unary1)*unary_marginals1
+        bethe_unary = (unary_marginals0.log().clamp(min=-1/self.EPS) - unary0)*unary_marginals0 + (
+            unary_marginals1.log().clamp(min=-1/self.EPS) - unary1)*unary_marginals1
         bethe_unary = self.degree*bethe_unary
         bethe = -bethe_unary.sum()
         # bethe free energy computation of binary part
@@ -989,7 +990,7 @@ class Ising(nn.Module):
             unary_factor_i = unary_factor_i.unsqueeze(1)
             unary_factor_j = unary_factor_j.unsqueeze(0)
             binary_factor_ij = binary_factor + unary_factor_i + unary_factor_j
-            binary_factor_ij = binary_marginal*(binary_marginal.log() - binary_factor_ij)
+            binary_factor_ij = binary_marginal*(binary_marginal.log().clamp(min=-1/self.EPS) - binary_factor_ij)
             bethe += binary_factor_ij.sum()
         return bethe
 
