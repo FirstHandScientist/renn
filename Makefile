@@ -24,7 +24,7 @@ SLEEP=15
 
 ALGORITHM_MSG={ve,mf,lbp,dbp,gbp}
 ALGORITHM_NET={bethe,kikuchi}
-
+# learn rate in mrf learing
 LR=0.0005
 TRAIN_ITERS=50
 # data set

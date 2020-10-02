@@ -9,6 +9,7 @@ TRAIN_LOG_NET=tlog_net
 GRID_N={3,4}
 # UNARY_STD={0.1,1.0}
 UNARY_STD={1.0,2.0}
+MRF_PARA=G1
 PENALTY={1,3,5}
 # STRUCTURE should be: grid | full_connected
 STRUCTURE=full_connected
@@ -26,6 +27,7 @@ ALGORITHM_NET={bethe,kikuchi}
 
 SLEEP=10
 TRAIN_ITERS=60
+# learn rate in mrf learing
 LR=0.0005
 # data set
 DATA_DIR=data
@@ -36,9 +38,9 @@ BATCH_SIZE=500
 ARCH={att0mlp0,att1mlp2}
 
 init:
-	mkdir -p ${LOG} ${TRAIN_LOG_MSG} ${TRAIN_LOG_NET} ${DATA_DIR}
+	mkdir -p ${LOG} ${ARCH_LOG} ${TRAIN_LOG_MSG} ${TRAIN_LOG_NET} ${DATA_DIR}
 
-ising_infer: $(shell echo ${LOG}/${RESULTS}_n${GRID_N}_std${UNARY_STD}_pen${PENALTY}.txt)
+ising_infer: $(shell echo ${LOG}/${RESULTS}_n${GRID_N}_${MRF_PARA}_std${UNARY_STD}_pen${PENALTY}.txt)
 
 
 ${LOG}/${RESULTS}%.txt: init
