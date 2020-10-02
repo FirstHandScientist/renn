@@ -38,7 +38,8 @@ ARCH={att0mlp0,att1mlp2}
 
 
 test:
-	echo ${ARCH_LOG}/${RESULTS}_n${GRID_N}_${MRF_PARA}_std${UNARY_STD}_pen${PENALTY}.txt
+	@echo $$(($${RANDOM} % ${SLEEP}))
+	@echo ${ARCH_LOG}/${RESULTS}_n${GRID_N}_${MRF_PARA}_std${UNARY_STD}_pen${PENALTY}.txt
 	echo ${A}
 
 init:
@@ -49,13 +50,13 @@ ising_infer: $(shell echo ${LOG}/${RESULTS}_n${GRID_N}_${MRF_PARA}_std${UNARY_ST
 
 
 ${LOG}/${RESULTS}%.txt: init
-	${PYTHON} infer_ising_marginals.py --structure ${STRUCTURE} --sleep ${SLEEP} --device ${DEVICE} --exp_iters ${EXP_ITERS} --task $@ > $@	
+	${PYTHON} infer_ising_marginals.py --structure ${STRUCTURE} --sleep $$(($${RANDOM} % ${SLEEP})) --device ${DEVICE} --exp_iters ${EXP_ITERS} --task $@ > $@	
 
 # architecture comparisons
 net_arch: $(shell echo ${ARCH_LOG}/${RESULTS}_n${GRID_N}_std${UNARY_STD}_pen${PENALTY}.txt,${ARCH})
 
 ${ARCH_LOG}/${RESULTS}%: init
-	${PYTHON} infer_ising_marginals.py --structure ${STRUCTURE} --sleep ${SLEEP} --device ${DEVICE} --exp_iters ${EXP_ITERS} --net $(shell cut -d',' -f2 <<<$@) --task $(shell cut -d',' -f1 <<<$@) > $(shell cut -d',' -f1 <<<$@).$(shell cut -d',' -f2 <<<$@)
+	${PYTHON} infer_ising_marginals.py --structure ${STRUCTURE} --sleep $$(($${RANDOM} % ${SLEEP})) --device ${DEVICE} --exp_iters ${EXP_ITERS} --net $(shell cut -d',' -f2 <<<$@) --task $(shell cut -d',' -f1 <<<$@) > $(shell cut -d',' -f1 <<<$@).$(shell cut -d',' -f2 <<<$@)
 
 # training with inference method
 
