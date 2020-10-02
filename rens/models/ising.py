@@ -583,7 +583,8 @@ class Ising(nn.Module):
             allx_iterater = itertools.product([-1,1], repeat=self.n**2)
             all_logpx = [self.log_energy(torch.FloatTensor(list(x)).unsqueeze(0).to(self.device)) for x in allx_iterater]
             all_logpx = torch.cat(all_logpx, 0)
-            log_Z = torch.exp(all_logpx).sum().log()
+            #log_Z = torch.exp(all_logpx).sum().log()
+            log_Z = torch.logsumexp(all_logpx,dim=0)
         
         return log_Z
     
