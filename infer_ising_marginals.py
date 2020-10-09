@@ -176,7 +176,7 @@ if __name__ == '__main__':
 
     # testing algorithms
     args.method = ['mf','bp', 'dbp','gbp','bethe', 'kikuchi']
-    args.method = ['bethe','kikuchi']
+
     
     
     time.sleep(np.random.randint(args.sleep))
