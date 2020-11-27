@@ -194,3 +194,11 @@ def generate_dataset(args):
     return args
     
 
+def agreement_penalty(binary_idx, unary_marginals, binary_marginals):
+        loss = 0
+
+        for k, (i,j) in enumerate(binary_idx):            
+            binary_marginal = binary_marginals[k]
+            loss += (binary_marginal.sum(1)[1] - unary_marginals[i])**2
+            loss += (binary_marginal.sum(0)[1] - unary_marginals[j])**2
+        return loss

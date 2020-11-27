@@ -1,6 +1,6 @@
 import torch
 from rens.models.GBP import parent2child_algo 
-from rens.utils.utils import l2, get_scores, binary2unary_marginals
+from rens.utils.utils import l2, get_scores, binary2unary_marginals, agreement_penalty
 from rens.models import ising as ising_models
 # inference methods ising model
 def bp_infer(ising, args, solver):
@@ -50,8 +50,10 @@ def bp_infer(ising, args, solver):
         binary_marginals_lbp = binary_marginals_lbp_new.detach()
 
     log_Z_lbp = -ising.bethe_energy(unary_marginals_lbp, binary_marginals_lbp)
+    agreement_loss = agreement_penalty(ising.binary_idx, unary_marginals_lbp,\
+                                       binary_marginals_lbp)
 
-    return log_Z_lbp, unary_marginals_lbp, binary_marginals_lbp
+    return (log_Z_lbp, unary_marginals_lbp, binary_marginals_lbp, agreement_loss)
 
 class p2cbp_infer(torch.nn.Module):
     """
@@ -90,8 +92,10 @@ class p2cbp_infer(torch.nn.Module):
                 binary_marginals[idx] = pair_belief / len(parents_of_pair)
 
         unary_marginals = binary2unary_marginals(self.model.binary_idx, binary_marginals, self.model.n)
+        agreement_loss = agreement_penalty(self.model.binary_idx, unary_marginals,\
+                                       binary_marginals)
 
-        return (-kikuchi_energy, unary_marginals, binary_marginals)
+        return (-kikuchi_energy, unary_marginals, binary_marginals, agreement_loss)
 
     def neg_free_energy(self):
         self.model._init_disfactor()
@@ -131,11 +135,14 @@ def mean_field_infer(ising, args):
         
         unary_marginals_mf = unary_marginals_mf_new.detach()
         binary_marginals_mf = binary_marginals_mf_new.detach()
+    # computing the agreement error
+    agreement_loss = agreement_penalty(ising.binary_idx, unary_marginals_mf,
+                                       binary_marginals_mf)
 
     log_Z_mf = -ising.bethe_energy(unary_marginals_mf, binary_marginals_mf)
     log_Z_mf_energy = -ising.free_energy_mf(unary_marginals_mf.detach())
 
-    return (log_Z_mf_energy, unary_marginals_mf, binary_marginals_mf)
+    return (log_Z_mf_energy, unary_marginals_mf, binary_marginals_mf, agreement_loss)
 
 class bethe_net_infer(torch.nn.Module):
     def __init__(self, ising, args):
@@ -177,7 +184,7 @@ class bethe_net_infer(torch.nn.Module):
         
         if not learn_model:
             log_Z_enc = -self.ising.bethe_energy(unary_marginals_enc, binary_marginals_enc)
-            return (log_Z_enc, unary_marginals_enc, binary_marginals_enc)
+            return (log_Z_enc, unary_marginals_enc, binary_marginals_enc, agreement_loss)
         else:
             bethe_enc = self.ising.bethe_energy(unary_marginals_enc, binary_marginals_enc)
             agreement_loss = self.encoder.agreement_penalty(self.ising.binary_idx, unary_marginals_enc, binary_marginals_enc)
@@ -232,7 +239,7 @@ class kikuchi_net_infer(torch.nn.Module):
         # compute the region based energy to estimated partition function
         kikuchi_energy, consist_error = self.encoder(self.model.region_graph)
         if not learn_model:
-            return (-kikuchi_energy, unary_marginals_enc, binary_marginals_enc)
+            return (-kikuchi_energy, unary_marginals_enc, binary_marginals_enc, consist_error)
         else:
             match_node_num = int(self.model.region_graph.number_of_nodes()) - \
                 len(self.model.region_graph.region_layers['R0'])

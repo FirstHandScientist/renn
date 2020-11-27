@@ -71,9 +71,11 @@ def run_marginal_exp(args, seed=3435, verbose=True):
         mrgnl_mf = mean_field_infer(ising, args)
         scores_mf = p_get_scores(test_ub=(mrgnl_mf[1], mrgnl_mf[2]))
         time_end = time.time()
+        
         all_scores['mf'] = {'l1': scores_mf[0], 'corr': scores_mf[1],\
                             'time': time_end - time_start,\
-                            'logz_err': torch.abs(log_Z - mrgnl_mf[0]).to('cpu').data.numpy()}
+                            'logz_err': torch.abs(log_Z - mrgnl_mf[0]).to('cpu').data.numpy(),\
+                            'aggErr2Energy': (mrgnl_mf[-1] / (mrgnl_mf[0] + args.eps)).to('cpu').data.numpy() }
         print('Finish {} ...'.format('mf'))
 
     # loopy bp
@@ -82,9 +84,11 @@ def run_marginal_exp(args, seed=3435, verbose=True):
         mrgnl_bp = bp_infer(ising, args, 'lbp')
         scores_bp = p_get_scores(test_ub=(mrgnl_bp[1], mrgnl_bp[2]))
         time_end = time.time()
+        
         all_scores['bp'] = {'l1': scores_bp[0], 'corr': scores_bp[1],\
                             'time': time_end - time_start,\
-                            'logz_err': torch.abs(log_Z - mrgnl_bp[0]).to('cpu').data.numpy()}
+                            'logz_err': torch.abs(log_Z - mrgnl_bp[0]).to('cpu').data.numpy(), \
+                            'aggErr2Energy': (mrgnl_bp[-1] / (mrgnl_bp[0] + args.eps)).to('cpu').data.numpy() }
         print('Finish {} ...'.format('bp'))
 
     # damped bp
@@ -95,7 +99,8 @@ def run_marginal_exp(args, seed=3435, verbose=True):
         time_end = time.time()
         all_scores['dbp'] = {'l1': scores_dbp[0], 'corr': scores_dbp[1], \
                              'time': time_end - time_start, \
-                             'logz_err': torch.abs(log_Z - mrgnl_dbp[0]).to('cpu').data.numpy()}
+                             'logz_err': torch.abs(log_Z - mrgnl_dbp[0]).to('cpu').data.numpy(), \
+                             'aggErr2Energy': (mrgnl_dbp[-1] / (mrgnl_dbp[0] + args.eps)).to('cpu').data.numpy() }
         print('Finish {} ...'.format('dbp'))
         time_end = time.time()
 
@@ -120,7 +125,8 @@ def run_marginal_exp(args, seed=3435, verbose=True):
         time_end = time.time()
         all_scores['gbp'] = {'l1': scores_gbp[0], 'corr': scores_gbp[1], \
                              'time': time_end - time_start, \
-                             'logz_err': torch.abs(log_Z - mrgnl_gbp[0]).to('cpu').data.numpy()}
+                             'logz_err': torch.abs(log_Z - mrgnl_gbp[0]).to('cpu').data.numpy(), \
+                             'aggErr2Energy': (mrgnl_gbp[-1] / (mrgnl_gbp[0]) + args.eps).to('cpu').data.numpy() }
         print('Finish {} ...'.format('gbp'))
 
     # Bethe net
@@ -132,7 +138,8 @@ def run_marginal_exp(args, seed=3435, verbose=True):
         time_end = time.time()
         all_scores['bethe'] = {'l1': scores_bethe[0], 'corr': scores_bethe[1], \
                                'time': time_end - time_start, \
-                               'logz_err': torch.abs(log_Z - mrgnl_bethe[0]).to('cpu').data.numpy()}
+                               'logz_err': torch.abs(log_Z - mrgnl_bethe[0]).to('cpu').data.numpy(),\
+                               'aggErr2Energy': (mrgnl_bethe[-1] / mrgnl_bethe[0]).to('cpu').data.numpy() }
         print('Finish {} ...'.format('bethe'))
 
 
@@ -144,10 +151,12 @@ def run_marginal_exp(args, seed=3435, verbose=True):
         kikuchi_net = kikuchi_net_infer(ising, args)
         mrgnl_kikuchi = kikuchi_net()
         scores_kikuchi = p_get_scores(test_ub=(mrgnl_kikuchi[1].to(unary_marginals), mrgnl_kikuchi[2].to(unary_marginals)))
+        aggErr2Energy = mrgnl_kikuchi[-1] / (mrgnl_kikuchi[0] + args.eps)
         time_end = time.time()
         all_scores['kikuchi'] = {'l1': scores_kikuchi[0], 'corr': scores_kikuchi[1],\
                                  'time': time_end - time_start, \
-                                 'logz_err': torch.abs(log_Z - mrgnl_kikuchi[0]).to('cpu').data.numpy()}
+                                 'logz_err': torch.abs(log_Z - mrgnl_kikuchi[0]).to('cpu').data.numpy(),\
+                                 'aggErr2Energy': aggErr2Energy.to('cpu').data.numpy()}
         print('Finish {} ...'.format('kikuchi'))
         
 
@@ -183,7 +192,7 @@ if __name__ == '__main__':
     if args.device != 'cpu':
         args.device = torch.device('cuda:{}'.format(int(get_freer_gpu()) ))
     
-    results = {key: {'l1':[], 'corr':[], 'logz_err':[], 'time':[]} for key in args.method}
+    results = {key: {'l1':[], 'corr':[], 'logz_err':[], 'time':[], 'aggErr2Energy': [] } for key in args.method}
     # check if nan in results
     def valid_exp(d):
         valid= True
